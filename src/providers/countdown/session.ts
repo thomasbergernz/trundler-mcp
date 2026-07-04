@@ -32,18 +32,26 @@ export function buildTokens(cookies: RawCookie[]): Tokens {
 export async function verifyTokens(
   tokens: Tokens,
 ): Promise<{ isLoggedIn: boolean; email: string | null }> {
-  const res = await fetch(`${COUNTDOWN.origin}/api/v1/bff/get-user`, {
-    headers: {
-      'X-Requested-With': 'OnlineShopping.WebApp',
-      Cookie: filterCookies(tokens.cookies),
-    },
-  });
-  if (!res.ok) return { isLoggedIn: false, email: null };
-  const data = (await res.json().catch(() => ({}))) as {
-    isLoggedIn?: boolean;
-    email?: string;
-  };
-  return { isLoggedIn: Boolean(data?.isLoggedIn), email: data?.email ?? null };
+  try {
+    const res = await fetch(`${COUNTDOWN.origin}/api/v1/bff/get-user`, {
+      headers: {
+        'X-Requested-With': 'OnlineShopping.WebApp',
+        Cookie: filterCookies(tokens.cookies),
+      },
+      // Don't let a hung request stall the login poll loop.
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!res.ok) return { isLoggedIn: false, email: null };
+    const data = (await res.json().catch(() => ({}))) as {
+      isLoggedIn?: boolean;
+      email?: string;
+    };
+    // Primary signal is isLoggedIn; a present email is a robust fallback.
+    const isLoggedIn = Boolean(data?.isLoggedIn) || Boolean(data?.email);
+    return { isLoggedIn, email: data?.email ?? null };
+  } catch {
+    return { isLoggedIn: false, email: null };
+  }
 }
 
 /** A token is considered stale one minute before its real expiry. */

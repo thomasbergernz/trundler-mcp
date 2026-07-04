@@ -61,21 +61,31 @@ export async function silentRefresh(store: TokenStore): Promise<Tokens> {
   }
 }
 
-/** Poll the browser until a genuine logged-in session appears. */
+/**
+ * Poll the browser until a genuine logged-in session appears. A guest session
+ * already carries an XSRF-TOKEN, so the real signal is the get-user API check —
+ * not the mere presence of a cookie.
+ */
 async function waitForLogin(context: BrowserContext, timeoutMs: number): Promise<Tokens> {
   const deadline = Date.now() + timeoutMs;
+  let polls = 0;
   while (Date.now() < deadline) {
     const cookies = await context.cookies(COUNTDOWN.origin);
     const hasXsrf = cookies.some((c) => c.name === 'XSRF-TOKEN');
-    const hasSession = cookies.some((c) => c.name === 'ASP.NET_SessionId');
-    if (hasXsrf && hasSession) {
+
+    if (hasXsrf) {
       const tokens = buildTokens(cookies);
       const check = await verifyTokens(tokens);
       if (check.isLoggedIn) {
         tokens.email = check.email;
         return tokens;
       }
+      if (polls % 5 === 0) log('Waiting for you to finish signing in...');
+    } else if (polls % 5 === 0) {
+      log('Waiting for the sign-in page to load...');
     }
+
+    polls++;
     await sleep(2_000);
   }
   throw new Error('Timed out after 5 minutes waiting for login. Please run login again.');
