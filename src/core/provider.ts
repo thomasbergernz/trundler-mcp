@@ -35,6 +35,18 @@ export interface LoginResult {
   expiresAt: string;
 }
 
+export interface StoreInfo {
+  id: string;
+  name: string;
+  region?: string;
+  address?: string;
+}
+
+export interface StoreSelection {
+  stores: StoreInfo[];
+  count: number;
+}
+
 /**
  * A shopping provider (Countdown, and future supermarkets). Providers normalize
  * their native APIs into the shared domain types. Capabilities a provider does
@@ -61,6 +73,11 @@ export interface ShoppingProvider {
   listPastOrders(filter?: string): Promise<unknown>;
   listPastOrderItems(opts?: PastOrderItemsOptions): Promise<ProductList>;
   getOrderItems(orderId: string): Promise<ProductList>;
+
+  /** Providers with per-store pricing (Foodstuffs) expose store selection. */
+  listStores?(query?: string): Promise<StoreSelection>;
+  setStore?(storeId: string): Promise<StoreInfo>;
+  getStore?(): Promise<StoreInfo | null>;
 }
 
 export class ProviderRegistry {

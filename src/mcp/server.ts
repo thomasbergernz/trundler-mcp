@@ -21,7 +21,7 @@ const providerArg = {
 
 export function buildServer(registry: ProviderRegistry = buildRegistry()): McpServer {
   const server = new McpServer(
-    { name: 'trundler', version: '0.1.1' },
+    { name: 'trundler', version: '0.1.2' },
     {
       instructions: [
         'When presenting a list of products to the user (from search_products, get_specials,',
@@ -157,6 +157,49 @@ export function buildServer(registry: ProviderRegistry = buildRegistry()): McpSe
             pageSize,
           }),
         );
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  // --- Store selection (per-store-pricing providers, e.g. New World) --------
+
+  server.registerTool(
+    'list_stores',
+    {
+      description:
+        'List a provider\'s stores (for providers with per-store pricing, e.g. New World). ' +
+        'Optionally filter by name. Use set_store to choose one before searching.',
+      inputSchema: {
+        query: z.string().optional().describe('Filter stores by name, e.g. "auckland".'),
+        ...providerArg,
+      },
+    },
+    async ({ query, provider }) => {
+      try {
+        const p = resolve(provider);
+        if (!p.listStores) throw new Error(`${p.name} does not use per-store selection.`);
+        return textResult(await p.listStores(query));
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'set_store',
+    {
+      description:
+        'Select the active store for a provider with per-store pricing. Persisted for future ' +
+        'calls. Get store ids from list_stores.',
+      inputSchema: { storeId: z.string().describe('Store id from list_stores.'), ...providerArg },
+    },
+    async ({ storeId, provider }) => {
+      try {
+        const p = resolve(provider);
+        if (!p.setStore) throw new Error(`${p.name} does not use per-store selection.`);
+        return textResult(await p.setStore(storeId));
       } catch (err) {
         return errorResult(err);
       }
