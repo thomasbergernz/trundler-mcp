@@ -20,7 +20,35 @@ const providerArg = {
 };
 
 export function buildServer(registry: ProviderRegistry = buildRegistry()): McpServer {
-  const server = new McpServer({ name: 'trundler', version: '0.1.0' });
+  const server = new McpServer(
+    { name: 'trundler', version: '0.1.1' },
+    {
+      instructions: [
+        'When presenting a list of products to the user (from search_products, get_specials,',
+        'browse_products, or past-order tools), format it for easy shopping:',
+        '',
+        '- Prefix each product with a capital letter label in order: A, B, C, ... (continue',
+        '  to AA, AB, ... past Z). The label lets the shopper say "two of A, one of C" when',
+        '  choosing quantities, so keep the labels stable within a single list.',
+        '- Show the price per unit whenever the data allows it. Products carry `unitPrice` and',
+        '  `unitMeasure` fields (e.g. $2.50 / 100g, $1.20 / kg, $0.45 / ea) — display this',
+        '  alongside the pack price so different pack sizes can be compared directly.',
+        '- Sort the list by price per unit, cheapest first (lowest `unitPrice` at the top).',
+        '  `unitMeasure` can differ between products (per 100g vs per kg vs per ea); normalise',
+        '  to a common measure before comparing (e.g. $/kg) so the ranking is meaningful, and',
+        '  only rank products against others in the same measure family (weight vs volume vs',
+        '  each). Products missing a comparable unit price go last, after the sorted ones.',
+        '',
+        '- Include a link column so the shopper can open each item to see its photo and full',
+        '  detail. Use the `productUrl` field as a compact clickable link (e.g. a markdown',
+        '  link labelled "view" or "photo"); if `productUrl` is absent, fall back to the',
+        '  `image` field, which is a direct URL to the product photo.',
+        '',
+        'Also include the product name, pack size, and pack price so the shopper has full',
+        'context. This ordering and labelling applies to any product listing you show.',
+      ].join('\n'),
+    },
+  );
 
   const resolve = (id?: string): ShoppingProvider => registry.get(id ?? DEFAULT_PROVIDER);
 

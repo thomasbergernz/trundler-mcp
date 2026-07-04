@@ -443,6 +443,7 @@ function mapProduct(p: RawProduct): Product {
     size: p.size?.volumeSize,
     inStock: p.availabilityStatus === 'In Stock',
     image: p.images?.big,
+    productUrl: p.sku ? `${COUNTDOWN.origin}/shop/productdetails?stockcode=${p.sku}` : undefined,
     department: p.departments?.[0]?.name,
   };
 }

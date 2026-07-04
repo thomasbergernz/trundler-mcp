@@ -18,6 +18,8 @@ export interface Product {
   size?: string;
   inStock?: boolean;
   image?: string;
+  /** Direct link to the product page (opens photo + full detail in a browser). */
+  productUrl?: string;
   department?: string;
 }
 
