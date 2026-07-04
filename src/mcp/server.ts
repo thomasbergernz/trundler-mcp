@@ -21,7 +21,7 @@ const providerArg = {
 
 export function buildServer(registry: ProviderRegistry = buildRegistry()): McpServer {
   const server = new McpServer(
-    { name: 'trundler', version: '0.1.2' },
+    { name: 'trundler', version: '0.1.3' },
     {
       instructions: [
         'When presenting a list of products to the user (from search_products, get_specials,',

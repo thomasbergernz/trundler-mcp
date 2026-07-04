@@ -27,5 +27,11 @@ export const NEW_WORLD: FoodstuffsBanner = {
   storeEnvVar: 'TRUNDLER_NEWWORLD_STORE_ID',
 };
 
-// Future: PAK_N_SAVE = { id: 'paknsave', origin: 'https://www.paknsave.co.nz',
-//   apiHost: 'https://api-prod.paknsave.co.nz', bannerCode: 'PNS', ... }
+export const PAK_N_SAVE: FoodstuffsBanner = {
+  id: 'paknsave',
+  name: "Pak'nSave",
+  origin: 'https://www.paknsave.co.nz',
+  apiHost: 'https://api-prod.paknsave.co.nz',
+  bannerCode: 'PNS',
+  storeEnvVar: 'TRUNDLER_PAKNSAVE_STORE_ID',
+};

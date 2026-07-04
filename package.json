@@ -1,6 +1,6 @@
 {
   "name": "trundler",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Local MCP server for grocery shopping providers (Countdown / Woolworths NZ) with browser-assisted login. Runs entirely on your own machine and residential connection. Extensible to other providers.",
   "type": "module",
   "bin": {
