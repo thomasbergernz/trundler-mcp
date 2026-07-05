@@ -1,8 +1,12 @@
-# trundler
+# trundler-mcp
 
 A **local** MCP server for grocery shopping. Runs entirely on your own machine and
 residential connection — no cloud services, no datacenter IPs, no bot-detection
 logistics.
+
+> Repo/package: **`trundler-mcp`**. The running server, its tools, and the on-disk
+> session folder keep the shorter name **`trundler`** (the MCP server id is
+> `trundler`, sessions live under `…/trundler/`).
 
 Supported providers:
 
@@ -86,7 +90,7 @@ Add to your MCP config (e.g. `.mcp.json`):
   "mcpServers": {
     "trundler": {
       "command": "node",
-      "args": ["D:/Projects/MCP/trundler/dist/index.js"]
+      "args": ["D:/Projects/MCP/trundler-mcp/dist/index.js"]
     }
   }
 }
@@ -99,7 +103,7 @@ During development you can point it at the TypeScript source instead:
   "mcpServers": {
     "trundler": {
       "command": "npx",
-      "args": ["tsx", "D:/Projects/MCP/trundler/src/index.ts"]
+      "args": ["tsx", "D:/Projects/MCP/trundler-mcp/src/index.ts"]
     }
   }
 }

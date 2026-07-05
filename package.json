@@ -1,10 +1,16 @@
 {
-  "name": "trundler",
+  "name": "trundler-mcp",
   "version": "0.1.3",
   "description": "Local MCP server for grocery shopping providers (Countdown / Woolworths NZ) with browser-assisted login. Runs entirely on your own machine and residential connection. Extensible to other providers.",
   "type": "module",
   "author": "Michael Wells",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/auckland-ai-collective/trundler-mcp.git"
+  },
+  "homepage": "https://github.com/auckland-ai-collective/trundler-mcp#readme",
+  "bugs": "https://github.com/auckland-ai-collective/trundler-mcp/issues",
   "bin": {
     "trundler": "dist/cli.js"
   },
