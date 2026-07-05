@@ -19,7 +19,8 @@
   "exports": {
     ".": {
       "types": "./dist/lib.d.ts",
-      "import": "./dist/lib.js"
+      "import": "./dist/lib.js",
+      "default": "./dist/lib.js"
     },
     "./package.json": "./package.json"
   },
