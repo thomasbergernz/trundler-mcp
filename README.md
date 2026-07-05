@@ -1,11 +1,18 @@
 # trundler-mcp
 
+[![npm version](https://img.shields.io/npm/v/@auckland-ai-collective/trundler-mcp.svg)](https://www.npmjs.com/package/@auckland-ai-collective/trundler-mcp)
+[![npm downloads](https://img.shields.io/npm/dm/@auckland-ai-collective/trundler-mcp.svg)](https://www.npmjs.com/package/@auckland-ai-collective/trundler-mcp)
+[![license](https://img.shields.io/npm/l/@auckland-ai-collective/trundler-mcp.svg)](./LICENSE)
+
 A **local** MCP server for grocery shopping. Runs entirely on your own machine and
 residential connection — no cloud services, no datacenter IPs, no bot-detection
 logistics.
 
-> Package: **`@auckland-ai-collective/trundler-mcp`** (repo `trundler-mcp`). The
-> running server, its tools, and the on-disk session folder keep the shorter name
+> **Published on npm:** [`@auckland-ai-collective/trundler-mcp`](https://www.npmjs.com/package/@auckland-ai-collective/trundler-mcp)
+> (repo `trundler-mcp`). Install with `npm install @auckland-ai-collective/trundler-mcp`
+> or run it straight away with `npx @auckland-ai-collective/trundler-mcp`.
+>
+> The running server, its tools, and the on-disk session folder keep the shorter name
 > **`trundler`** (the MCP server id is `trundler`, sessions live under `…/trundler/`).
 
 Supported providers:
@@ -100,8 +107,8 @@ npm run build
 
 ## Register with your agent
 
-Add to your MCP config (e.g. `.mcp.json`). Once published, the simplest form runs the
-server straight from npm:
+Add to your MCP config (e.g. `.mcp.json`). The simplest form runs the published
+server straight from npm — no clone, no build:
 
 ```json
 {
