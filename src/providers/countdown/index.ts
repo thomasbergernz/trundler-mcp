@@ -215,23 +215,32 @@ export class CountdownProvider implements ShoppingProvider {
     const res = await this.callApi('/api/v1/trolleys/my');
     if (isApiError(res)) throw apiError('Failed to get cart', res);
     const payload = res as CartPayload;
-    const items = (payload.items ?? []).map((item) => ({
-      sku: item.sku,
-      name: item.name,
-      quantity: item.quantity,
-      unit: item.unit,
-      price: item.price?.salePrice,
-      originalPrice: item.price?.originalPrice,
-      savings: item.price?.savePrice,
-      subtotal: item.totalPrice,
-    }));
+
+    // Trolley items are grouped by aisle (items[].products[]), quantity is an
+    // object, the line total is price.total, and cart totals live under
+    // context.basketTotals — flatten and remap accordingly.
+    const items = (payload.items ?? []).flatMap((group) =>
+      (group.products ?? []).map((p) => ({
+        sku: p.sku,
+        name: p.name,
+        quantity: p.quantity?.value,
+        unit: p.unit,
+        price: p.price?.salePrice,
+        originalPrice: p.price?.originalPrice,
+        savings: p.price?.savePrice,
+        subtotal: p.price?.total,
+      })),
+    );
+
+    const totals = payload.context?.basketTotals;
     return {
       items,
       totals: {
-        itemCount: payload.itemCount,
-        subtotal: payload.subtotal,
-        savings: payload.savings,
-        total: payload.total,
+        itemCount: totals?.totalItems ?? payload.itemCount,
+        totalQuantity: totals?.totalItemQuantity,
+        subtotal: totals?.subtotal,
+        savings: totals?.savings,
+        total: totals?.totalIncludingDeliveryFees,
       },
     };
   }
@@ -377,18 +386,30 @@ interface ProductsPayload {
 }
 
 interface CartPayload {
-  items?: Array<{
-    sku: string;
-    name?: string;
-    quantity?: number;
-    unit?: string;
-    totalPrice?: string | number;
-    price?: { salePrice?: number; originalPrice?: number; savePrice?: number };
-  }>;
   itemCount?: number;
-  subtotal?: string;
-  savings?: string;
-  total?: string;
+  // Trolley lines are grouped by aisle; products are nested one level down.
+  items?: Array<{
+    categoryType?: string;
+    categoryDescription?: string;
+    products?: Array<{
+      sku: string;
+      name?: string;
+      unit?: string;
+      quantity?: { value?: number; quantityInOrder?: number };
+      price?: { salePrice?: number; originalPrice?: number; savePrice?: number; total?: string };
+    }>;
+  }>;
+  context?: {
+    basketTotals?: {
+      subtotal?: string;
+      savings?: string;
+      totalItems?: number;
+      totalItemQuantity?: number;
+      deliveryFees?: string;
+      bagFees?: string;
+      totalIncludingDeliveryFees?: string;
+    };
+  };
 }
 
 interface CartMutationBody {
