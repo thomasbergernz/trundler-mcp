@@ -1,3 +1,6 @@
+import { execFileSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { chromium, type BrowserContext } from 'playwright';
 import { log } from '../../core/config.js';
 import type { TokenStore } from '../../core/tokenStore.js';
@@ -8,11 +11,31 @@ import { buildTokens, verifyTokens } from './session.js';
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
+ * Ensure Playwright's Chromium is installed before we try to launch it. We do
+ * this lazily on first use (instead of a postinstall hook) so that merely
+ * depending on this package doesn't force a ~150 MB browser download.
+ */
+function ensureBrowser(): void {
+  let executable: string | undefined;
+  try {
+    executable = chromium.executablePath();
+  } catch {
+    executable = undefined;
+  }
+  if (executable && existsSync(executable)) return;
+
+  log('Chromium not found — downloading it once (first-time setup, ~150 MB)...');
+  const cli = createRequire(import.meta.url).resolve('playwright/cli.js');
+  execFileSync(process.execPath, [cli, 'install', 'chromium'], { stdio: 'inherit' });
+}
+
+/**
  * Assisted login: open a real (headed) browser on the user's own connection,
  * let them sign in (handling MFA/captcha themselves), then capture the session.
  * This is the most bot-resistant approach and stores no password.
  */
 export async function interactiveLogin(store: TokenStore): Promise<Tokens> {
+  ensureBrowser();
   const browser = await chromium.launch({ headless: false });
   try {
     const context = await browser.newContext();
@@ -40,6 +63,7 @@ export async function silentRefresh(store: TokenStore): Promise<Tokens> {
   const state = await store.loadState();
   if (!state) throw new Error('no saved session');
 
+  ensureBrowser();
   const browser = await chromium.launch({ headless: true });
   try {
     const context = await browser.newContext({ storageState: state as never });

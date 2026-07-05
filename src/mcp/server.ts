@@ -1,7 +1,12 @@
+import { createRequire } from 'node:module';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { ProviderRegistry, ShoppingProvider } from '../core/provider.js';
 import { buildRegistry, DEFAULT_PROVIDER } from '../providers/index.js';
+
+// Report the real package version (../../package.json relative to this file at
+// both src/mcp/server.ts and dist/mcp/server.js) so the MCP handshake never lies.
+const { version } = createRequire(import.meta.url)('../../package.json') as { version: string };
 
 function textResult(data: unknown) {
   return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
@@ -21,7 +26,7 @@ const providerArg = {
 
 export function buildServer(registry: ProviderRegistry = buildRegistry()): McpServer {
   const server = new McpServer(
-    { name: 'trundler', version: '0.1.3' },
+    { name: 'trundler', version },
     {
       instructions: [
         'When presenting a list of products to the user (from search_products, get_specials,',

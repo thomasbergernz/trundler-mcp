@@ -4,9 +4,9 @@ A **local** MCP server for grocery shopping. Runs entirely on your own machine a
 residential connection — no cloud services, no datacenter IPs, no bot-detection
 logistics.
 
-> Repo/package: **`trundler-mcp`**. The running server, its tools, and the on-disk
-> session folder keep the shorter name **`trundler`** (the MCP server id is
-> `trundler`, sessions live under `…/trundler/`).
+> Package: **`@auckland-ai-collective/trundler-mcp`** (repo `trundler-mcp`). The
+> running server, its tools, and the on-disk session folder keep the shorter name
+> **`trundler`** (the MCP server id is `trundler`, sessions live under `…/trundler/`).
 
 Supported providers:
 
@@ -73,17 +73,48 @@ Session/config data is stored per provider outside the repo:
 
 ## Install
 
+From npm (no build step needed — ships compiled):
+
 ```bash
-npm install          # also downloads the Chromium browser (via postinstall)
+npm install @auckland-ai-collective/trundler-mcp
+```
+
+Or run the server directly without installing:
+
+```bash
+npx @auckland-ai-collective/trundler-mcp
+```
+
+Chromium (used **only** for the Countdown login) is **not** downloaded at install
+time. The first time you run `login`, trundler fetches it once (~150 MB) if it's
+missing — so merely depending on the package stays lightweight, and New World /
+Pak'nSave (which never need a browser) pull nothing extra. To pre-fetch it yourself:
+`npx playwright install chromium`.
+
+Building from source instead:
+
+```bash
+npm install
 npm run build
 ```
 
-If the browser didn't download automatically, run `npx playwright install chromium`.
-(Chromium is used only for the Countdown login; New World / Pak'nSave don't need it.)
-
 ## Register with your agent
 
-Add to your MCP config (e.g. `.mcp.json`):
+Add to your MCP config (e.g. `.mcp.json`). Once published, the simplest form runs the
+server straight from npm:
+
+```json
+{
+  "mcpServers": {
+    "trundler": {
+      "command": "npx",
+      "args": ["-y", "@auckland-ai-collective/trundler-mcp"]
+    }
+  }
+}
+```
+
+Or point at a local build:
 
 ```json
 {
@@ -113,16 +144,44 @@ During development you can point it at the TypeScript source instead:
 > (`npm run build`) and **reconnect** the MCP — instructions and tool lists are sent
 > once at connection time.
 
+## Use as a library
+
+If you're embedding trundler in your own app (e.g. a shell that mounts the MCP
+server in-process rather than spawning it), import from the package root. This entry
+point has **no side effects** — importing it starts nothing:
+
+```ts
+import {
+  buildServer,        // -> McpServer, ready to .connect(transport)
+  buildRegistry,      // -> ProviderRegistry of all providers
+  DEFAULT_PROVIDER,   // -> "countdown"
+} from '@auckland-ai-collective/trundler-mcp';
+
+// Mount on your own transport:
+const server = buildServer();
+await server.connect(myTransport);
+
+// …or drive a provider directly, bypassing MCP entirely:
+const cart = await buildRegistry().get('countdown').cartGet();
+```
+
+Types (`ShoppingProvider`, `Cart`, `Product`, …) are exported too. The package ships
+its own `.d.ts` declarations. Prefer spawning the process instead? The published
+`trundler-mcp` bin is the stdio server; `trundler` is the setup CLI (below).
+
 ## Setup per provider
 
 **Countdown / Woolworths** — log in once:
 
 ```bash
+trundler login             # installed package (bin)
+# or, from a source checkout:
 npm run cli login          # or: node dist/cli.js login   (after build)
 ```
 
 A browser window opens — sign in to Woolworths; it closes once the session is
-captured. Verify any time with `npm run cli check`.
+captured. Verify any time with `trundler check` (or `npm run cli check`). The first
+`login` also downloads Chromium once if it isn't already present.
 
 **New World / Pak'nSave** — no login; just pick a store. Via your agent:
 

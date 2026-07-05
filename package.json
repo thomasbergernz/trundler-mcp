@@ -1,17 +1,30 @@
 {
-  "name": "trundler-mcp",
-  "version": "0.1.4",
+  "name": "@auckland-ai-collective/trundler-mcp",
+  "version": "0.1.5",
   "description": "Local MCP server for grocery shopping providers (Countdown / Woolworths NZ) with browser-assisted login. Runs entirely on your own machine and residential connection. Extensible to other providers.",
   "type": "module",
-  "author": "Michael Wells",
+  "author": "Michael Wells <mike@aaic.nz>",
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/auckland-ai-collective/trundler-mcp.git"
   },
   "homepage": "https://github.com/auckland-ai-collective/trundler-mcp#readme",
   "bugs": "https://github.com/auckland-ai-collective/trundler-mcp/issues",
+  "main": "dist/lib.js",
+  "types": "dist/lib.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/lib.d.ts",
+      "import": "./dist/lib.js"
+    },
+    "./package.json": "./package.json"
+  },
   "bin": {
+    "trundler-mcp": "dist/index.js",
     "trundler": "dist/cli.js"
   },
   "files": [
@@ -24,7 +37,7 @@
     "dev": "tsx src/index.ts",
     "cli": "tsx src/cli.ts",
     "typecheck": "tsc --noEmit",
-    "postinstall": "playwright install chromium"
+    "prepublishOnly": "npm run typecheck && npm run build"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",
