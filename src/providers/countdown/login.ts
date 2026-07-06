@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import { join, dirname } from 'node:path';
 import { chromium, type BrowserContext } from 'playwright';
 import { log } from '../../core/config.js';
 import type { TokenStore } from '../../core/tokenStore.js';
@@ -25,7 +26,12 @@ function ensureBrowser(): void {
   if (executable && existsSync(executable)) return;
 
   log('Chromium not found — downloading it once (first-time setup, ~150 MB)...');
-  const cli = createRequire(import.meta.url).resolve('playwright/cli.js');
+  // playwright >=1.49 dropped './cli.js' from its package "exports" map, so
+  // resolve the package dir (via the always-exported package.json) and join cli.js.
+  const cli = join(
+    dirname(createRequire(import.meta.url).resolve('playwright/package.json')),
+    'cli.js',
+  );
   execFileSync(process.execPath, [cli, 'install', 'chromium'], { stdio: 'inherit' });
 }
 
