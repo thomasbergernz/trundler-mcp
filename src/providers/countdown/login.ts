@@ -3,13 +3,31 @@ import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join, dirname } from 'node:path';
 import { chromium, type BrowserContext } from 'playwright';
-import { log } from '../../core/config.js';
+import { log, configDir } from '../../core/config.js';
 import type { TokenStore } from '../../core/tokenStore.js';
 import type { Tokens } from '../../core/types.js';
 import { COUNTDOWN } from './constants.js';
 import { buildTokens, verifyTokens } from './session.js';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * On-disk Chrome profile for this app. Using a persistent profile means cookies /
+ * "keep me signed in" / device trust survive between logins, so a returning user
+ * isn't forced through a full cold sign-in every time.
+ *
+ * Kept OUTSIDE the provider dir (a sibling of it) so `logout` — which clears the
+ * provider dir — does NOT wipe the browser profile. The account stays remembered
+ * for the next sign-in even after logging out.
+ */
+function profileDir(): string {
+  return join(configDir(), 'browser-profiles', COUNTDOWN.id);
+}
+
+/** Chromium locks a user-data-dir, so only one session may use the profile at a
+ *  time. This guards against an interactive login and a silent refresh (or two
+ *  logins) colliding on the same profile. */
+let profileBusy = false;
 
 /**
  * Ensure Playwright's Chromium is installed before we try to launch it. We do
@@ -42,10 +60,14 @@ function ensureBrowser(): void {
  */
 export async function interactiveLogin(store: TokenStore): Promise<Tokens> {
   ensureBrowser();
-  const browser = await chromium.launch({ headless: false });
+  if (profileBusy) throw new Error('A browser session is already open for this profile.');
+  profileBusy = true;
+  // Persistent profile: reuses the on-disk Chrome profile so a returning user is
+  // often still signed in (or only needs a light re-confirm) instead of a full
+  // cold login.
+  const context = await chromium.launchPersistentContext(profileDir(), { headless: false });
   try {
-    const context = await browser.newContext();
-    const page = await context.newPage();
+    const page = context.pages()[0] ?? (await context.newPage());
     log('Opening Woolworths sign-in — please complete login in the browser window...');
     await page.goto(COUNTDOWN.signinUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 });
 
@@ -56,7 +78,8 @@ export async function interactiveLogin(store: TokenStore): Promise<Tokens> {
     log(`Login captured for ${tokens.email ?? 'unknown account'}.`);
     return tokens;
   } finally {
-    await browser.close();
+    await context.close();
+    profileBusy = false;
   }
 }
 
@@ -66,14 +89,16 @@ export async function interactiveLogin(store: TokenStore): Promise<Tokens> {
  * session has expired (the caller then prompts for interactiveLogin).
  */
 export async function silentRefresh(store: TokenStore): Promise<Tokens> {
-  const state = await store.loadState();
-  if (!state) throw new Error('no saved session');
+  // The persistent profile holds the session; if it was never created there's
+  // nothing to refresh (prompt an interactive login instead).
+  if (!existsSync(profileDir())) throw new Error('no saved session');
 
   ensureBrowser();
-  const browser = await chromium.launch({ headless: true });
+  if (profileBusy) throw new Error('A browser session is already open for this profile.');
+  profileBusy = true;
+  const context = await chromium.launchPersistentContext(profileDir(), { headless: true });
   try {
-    const context = await browser.newContext({ storageState: state as never });
-    const page = await context.newPage();
+    const page = context.pages()[0] ?? (await context.newPage());
     await page.goto(COUNTDOWN.homeUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 });
     await page.waitForTimeout(3_000);
 
@@ -87,7 +112,8 @@ export async function silentRefresh(store: TokenStore): Promise<Tokens> {
     await store.saveTokens(tokens);
     return tokens;
   } finally {
-    await browser.close();
+    await context.close();
+    profileBusy = false;
   }
 }
 
