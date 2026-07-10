@@ -29,6 +29,10 @@ Provider-plugin design: MCP tools are provider-agnostic and dispatch by an optio
 - `src/providers/index.ts` — `buildRegistry()` registers all providers; `DEFAULT_PROVIDER`.
 - `src/providers/countdown/` — authenticated provider. `login.ts` opens a real Playwright browser (persistent profile, user signs in themselves, no password stored); `session.ts` stores captured cookies + XSRF token; API calls are plain `fetch()` afterwards, with silent headless refresh when tokens go stale.
 - `src/providers/foodstuffs/` — one `FoodstuffsProvider` class parameterized by a banner config (`banners.ts` defines New World and Pak'nSave). Anonymous guest token minted by loading the store homepage **via `curl`** (Cloudflare rejects Node's `fetch` for that page), cached ~30 min. Pricing is per-store; the selected store is persisted per provider.
+- `src/providers/shopify/` — generic `ShopifyProvider` over any Shopify storefront's public JSON (`products.json`, `collections.json`, `search/suggest.json`); `stores.ts` defines Ceres. Read-only, anonymous. Search uses `suggest.json` fast-path (≤10, no unit price) and falls back to a cached full-catalog crawl for larger/specials queries; specials = variant `compare_at_price > price`.
+- `src/providers/woocommerce/` — generic `WooCommerceProvider` over the public `wc/store/v1` REST API; `stores.ts` defines Naturally Organic. Read-only, anonymous; specials via `on_sale=true`; totals from the `X-WP-Total` header. Uses the `curl` helper (host serves a broken TLS chain).
+- `src/providers/farro/` — one-off `FarroProvider` for Farro's bespoke "Olympic Trader" Blazor backend. `POST /api/ViewModel/Search/Search` (header `x-tradingentity-id: Olympic-1234`) for search/browse (Category facet); specials are the `onSale` products scanned from that catalog (no server-side specials filter exists).
+- `src/core/curl.ts` — shared `curlGet()` (status + headers + body) for hosts whose incomplete TLS chain Node's `fetch` rejects (`UNABLE_TO_VERIFY_LEAF_SIGNATURE`). Same no-extra-deps escape hatch as the Foodstuffs token mint.
 - `src/mcp/server.ts` — `buildServer()` registers all tools and the server-level presentation instructions (letter labels, unit-price sorting, product links). Version is read from `package.json` at runtime.
 - Entry points: `src/index.ts` (stdio server bin), `src/cli.ts` (setup CLI), `src/lib.ts` (side-effect-free library export: `buildServer`, `buildRegistry`, types).
 
@@ -44,4 +48,4 @@ Session/config state lives outside the repo: `~/.config/trundler/<provider>/` (m
 
 ## Adding a provider
 
-Implement `ShoppingProvider` in `src/providers/<name>/`, register in `src/providers/index.ts`. Another Foodstuffs banner is just a new entry in `src/providers/foodstuffs/banners.ts`.
+Implement `ShoppingProvider` in `src/providers/<name>/`, register in `src/providers/index.ts`. Adding a store on an existing platform is config-only: a Foodstuffs banner (`foodstuffs/banners.ts`), a Shopify store (`shopify/stores.ts`), or a WooCommerce shop (`woocommerce/stores.ts`).
