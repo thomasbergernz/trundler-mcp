@@ -11,6 +11,8 @@ import type {
 import { TokenStore } from '../../core/tokenStore.js';
 import type {
   Cart,
+  CartBatchItem,
+  CartBatchResult,
   CartMutation,
   Product,
   ProductList,
@@ -275,6 +277,87 @@ export class CountdownProvider implements ShoppingProvider {
     };
   }
 
+  // --- Batch cart (delegation) ----------------------------------------------
+  // These fill the trolley in bulk but deliberately stop there: the shopper picks
+  // a delivery slot and pays themselves via `reviewUrl`. No slot/checkout/payment
+  // capability is exposed here by design.
+
+  async cartAddMany(
+    items: Array<{ sku: string; quantity: number; unit: Unit }>,
+  ): Promise<CartBatchResult> {
+    const outcomes: CartBatchItem[] = [];
+    for (const it of items) {
+      const qty = it.quantity > 0 ? it.quantity : 1;
+      try {
+        const r = await this.mutateCart({ sku: it.sku, quantity: qty, pricingUnit: it.unit, adId: null });
+        outcomes.push({ sku: it.sku, quantity: qty, unit: it.unit, ok: Boolean(r.success) });
+      } catch (err) {
+        outcomes.push({
+          sku: it.sku,
+          quantity: qty,
+          unit: it.unit,
+          ok: false,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+    return this.batchResult(outcomes);
+  }
+
+  async cartClear(): Promise<CartBatchResult> {
+    const cart = await this.cartGet();
+    const outcomes: CartBatchItem[] = [];
+    for (const line of cart.items) {
+      const unit: Unit = /kg/i.test(line.unit ?? '') ? 'Kg' : 'Each';
+      try {
+        const r = await this.cartRemove(line.sku, unit);
+        outcomes.push({ sku: line.sku, quantity: 0, unit, ok: Boolean(r.success), name: line.name });
+      } catch (err) {
+        outcomes.push({
+          sku: line.sku,
+          quantity: 0,
+          unit,
+          ok: false,
+          name: line.name,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+    return this.batchResult(outcomes);
+  }
+
+  async reorderUsuals(maxItems: number): Promise<CartBatchResult> {
+    const want = Math.max(1, maxItems);
+    // Frequent items come ~20/page; fetch enough pages to still hit `want` after
+    // dropping out-of-stock lines.
+    const list = await this.listPastOrderItems({
+      sort: 'Frequency',
+      maxPages: Math.min(5, Math.ceil(want / 15) + 1),
+    });
+    const picks = list.products.filter((p) => p.inStock).slice(0, want);
+    const items = picks.map((p) => ({
+      sku: p.sku,
+      quantity: 1,
+      unit: p.pricingUnit ?? ('Each' as Unit),
+    }));
+    const result = await this.cartAddMany(items);
+    // Attach names for a friendlier review (add-many works from SKUs alone).
+    const nameBySku = new Map(picks.map((p) => [p.sku, p.name]));
+    result.items = result.items.map((i) => ({ ...i, name: i.name ?? nameBySku.get(i.sku) }));
+    return result;
+  }
+
+  private async batchResult(items: CartBatchItem[]): Promise<CartBatchResult> {
+    const cart = await this.cartGet();
+    return {
+      added: items.filter((i) => i.ok).length,
+      failed: items.filter((i) => !i.ok).length,
+      items,
+      totals: cart.totals,
+      reviewUrl: COUNTDOWN.trolleyUrl,
+    };
+  }
+
   // --- Past orders ----------------------------------------------------------
 
   async listPastOrders(filter?: string): Promise<unknown> {
@@ -463,6 +546,7 @@ function mapProduct(p: RawProduct): Product {
     unitMeasure: p.size?.cupMeasure,
     size: p.size?.volumeSize,
     inStock: p.availabilityStatus === 'In Stock',
+    pricingUnit: /kg/i.test(p.unit ?? '') ? 'Kg' : 'Each',
     image: p.images?.big,
     productUrl: p.sku ? `${COUNTDOWN.origin}/shop/productdetails?stockcode=${p.sku}` : undefined,
     department: p.departments?.[0]?.name,

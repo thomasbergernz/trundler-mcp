@@ -3,6 +3,8 @@ export const COUNTDOWN = {
   name: 'Countdown / Woolworths NZ',
   origin: 'https://www.woolworths.co.nz',
   homeUrl: 'https://www.woolworths.co.nz/',
+  /** Where the shopper reviews the trolley and completes slot + payment themselves. */
+  trolleyUrl: 'https://www.woolworths.co.nz/shop/trolley',
   // Initiating OIDC sign-in as the FIRST navigation avoids HTTP/2 connection-reuse
   // issues and lands directly on the Auth0 login form.
   signinUrl:

@@ -227,11 +227,31 @@ Every tool takes an optional `provider` argument (default: `countdown`).
 | `login` | Open a browser to sign in | countdown |
 | `check_login` | Verify the stored session | countdown |
 | `cart_get` / `cart_add` / `cart_update` / `cart_remove` | Manage the cart | countdown |
+| `cart_add_many` / `cart_clear` | Build/reset a whole cart at once | countdown |
+| `reorder_usuals` | Add your most-frequent items in one call | countdown |
 | `list_past_orders` / `list_past_order_items` / `get_order_items` | Order history | countdown |
 
 Calling a login/cart/order tool on any read-only provider (New World, Pak'nSave,
 Ceres, Farro, Naturally Organic) returns a clear "requires login — not yet
 supported" error rather than failing silently.
+
+## Delegated shopping
+
+You can hand a whole shop to the agent — on Countdown, which is the only provider
+with a writable cart. Two paths:
+
+- **Restock your usuals:** `reorder_usuals` adds your most frequently purchased
+  in-stock items (the exact SKUs you actually buy) in one call.
+- **From a list:** the agent resolves each line with `search_products`, confirms
+  anything ambiguous or new, then adds the chosen SKUs with `cart_add_many`
+  (`cart_clear` first if you want the trolley to exactly match the list).
+
+Every batch result carries a `reviewUrl` (your Woolworths trolley).
+
+> **Where it stops — on purpose.** trundler fills the trolley and hands back. It
+> **does not** pick a delivery slot, submit checkout, place the order, or handle
+> payment — there are no tools for those, and the server instructions tell the agent
+> not to attempt them. You open the `reviewUrl` to choose a time and pay yourself.
 
 ## Product listings
 

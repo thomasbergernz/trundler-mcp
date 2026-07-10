@@ -1,4 +1,4 @@
-import type { Cart, CartMutation, ProductList, Unit } from './types.js';
+import type { Cart, CartBatchResult, CartMutation, ProductList, Unit } from './types.js';
 
 export interface SearchOptions {
   maxProducts?: number;
@@ -69,6 +69,16 @@ export interface ShoppingProvider {
   cartAdd(sku: string, quantity: number, unit: Unit): Promise<CartMutation>;
   cartUpdate(sku: string, quantity: number, unit: Unit): Promise<CartMutation>;
   cartRemove(sku: string, unit: Unit): Promise<CartMutation>;
+
+  /**
+   * Delegation helpers for building a whole shop at once. Only providers with a
+   * writable cart implement these; the paid steps (slot, checkout, payment) are
+   * deliberately never exposed — the shopper finishes those in their own browser.
+   */
+  cartAddMany?(items: Array<{ sku: string; quantity: number; unit: Unit }>): Promise<CartBatchResult>;
+  cartClear?(): Promise<CartBatchResult>;
+  /** Add the shopper's most frequently purchased in-stock items to the cart. */
+  reorderUsuals?(maxItems: number): Promise<CartBatchResult>;
 
   listPastOrders(filter?: string): Promise<unknown>;
   listPastOrderItems(opts?: PastOrderItemsOptions): Promise<ProductList>;
