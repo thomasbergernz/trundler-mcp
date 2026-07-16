@@ -78,14 +78,18 @@ export function buildServer(registry: ProviderRegistry = buildRegistry()): McpSe
         '  (e.g. "gate pa"), not just the store name. Each store carries its suburb and',
         '  latitude/longitude. Let the shopper pick up to 5 stores to compare.',
         '- Then call `compare_list` with the shopping list and those stores. Foodstuffs stores',
-        '  (newworld/paknsave) need a `storeId`; `countdown` (requires login) and `warehouse`',
-        '  are national — no storeId. The result gives each store\'s matched product + price per',
+        '  (newworld/paknsave) need a `storeId`; `countdown` and `warehouse` are national — no',
+        '  storeId. The result gives each store\'s matched product + price per',
         '  item, a per-store basket subtotal, coverage, the cheapest store per item, and the',
         '  cheapest full-basket store.',
+        '- countdown works logged-out: reads use an anonymous guest session priced at Woolworths\'',
+        '  DEFAULT store (roughly IP-located), so present those as "Woolworths (default store)".',
+        '  A logged-in session prices at the shopper\'s own store instead. Cart and order history',
+        '  always need the `login` tool.',
         '- Matches are the top keyword hit, NOT barcode-exact. Check the product names against',
         '  what the shopper meant; if one is wrong, refine that item\'s query or pick from the',
-        '  `alternates`. Report any `not-found` items and any `unavailable` store (e.g. Countdown',
-        '  when not logged in) rather than hiding them.',
+        '  `alternates`. Report any `not-found` items and any `unavailable` store',
+        '  rather than hiding them.',
         '- `save_list` / `get_list` store the shopper\'s regular list so it can be reused and fed',
         '  straight into `compare_list`.',
         '',
@@ -131,7 +135,7 @@ export function buildServer(registry: ProviderRegistry = buildRegistry()): McpSe
     'login',
     {
       description:
-        'Open a browser window to sign in to a shopping provider. Complete the login in the window; the session is captured and stored locally. Run this once, or again when the session expires.',
+        'Open a browser window to sign in to a shopping provider. Complete the login in the window; the session is captured and stored locally. Run this once, or again when the session expires. For countdown, login is needed for cart and order tools (and to price at your own store) — product search works without it at the default store.',
       inputSchema: { ...providerArg },
     },
     async ({ provider }) => {
@@ -329,8 +333,9 @@ export function buildServer(registry: ProviderRegistry = buildRegistry()): McpSe
         'Price a shopping list across up to 5 stores and compare. For each item at each store ' +
         'it returns the top matching product and price, plus each store\'s basket subtotal, ' +
         'coverage, the cheapest store per item, and the cheapest full-basket store. Foodstuffs ' +
-        'stores (newworld/paknsave) need a storeId from list_stores; countdown (requires login) ' +
-        'and warehouse are national. Matches are relevance-based, not barcode-exact — verify ' +
+        'stores (newworld/paknsave) need a storeId from list_stores; countdown (guest prices at ' +
+        'the default Woolworths store unless logged in) and warehouse are national. Matches are ' +
+        'relevance-based, not barcode-exact — verify ' +
         'names and use each item\'s `alternates` to substitute. A store that cannot be priced ' +
         'is returned as an `unavailable` column, never an error.',
       inputSchema: {
@@ -384,7 +389,8 @@ export function buildServer(registry: ProviderRegistry = buildRegistry()): McpSe
         'basket, total, leftover, and a per-category breakdown. It does NOT estimate how many ' +
         'people it feeds — reason about servings from the item names/sizes and adjust ' +
         'quantities or swap items to suit the number of people. Foodstuffs stores need a ' +
-        'storeId; countdown needs login; a store that cannot be priced is skipped.',
+        'storeId; countdown prices at the default Woolworths store unless logged in; a store ' +
+        'that cannot be priced is skipped.',
       inputSchema: {
         stores: storesSchema.describe('Up to 5 stores to pull specials from.'),
         budget: z.number().optional().describe('Target spend in dollars (default: 100).'),

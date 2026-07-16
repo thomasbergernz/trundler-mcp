@@ -13,6 +13,9 @@ export const COUNTDOWN = {
   /** Tokens are treated as valid for this long after capture before a refresh. */
   tokenTtlMs: 3.5 * 60 * 60 * 1000,
 
+  /** Anonymous guest sessions are shorter-lived — re-mint conservatively. */
+  guestTtlMs: 25 * 60 * 1000,
+
   /** Headers required by the Woolworths BFF/API. */
   headers: {
     Accept: 'application/json, text/plain, */*',

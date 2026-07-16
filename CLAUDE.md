@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-`@auckland-ai-collective/trundler-mcp` — a local stdio MCP server for NZ grocery shopping providers (Countdown/Woolworths with full login+cart, New World and Pak'nSave read-only). The published bin `trundler-mcp` is the stdio server; `trundler` is the setup CLI. The server id and on-disk folder use the short name `trundler`.
+`@auckland-ai-collective/trundler-mcp` — a local stdio MCP server for NZ grocery shopping providers (Countdown/Woolworths: anonymous read via guest session at the default store, login+cart for account features; New World and Pak'nSave read-only). The published bin `trundler-mcp` is the stdio server; `trundler` is the setup CLI. The server id and on-disk folder use the short name `trundler`.
 
 ## Commands
 
@@ -18,6 +18,7 @@ node smoke-test.mjs    # spawns built server over stdio, lists tools, exercises 
 node pns-test.mjs      # exercises Pak'nSave provider directly against dist/ (needs build)
 node compare-test.mjs  # live multi-store compare_list + saved-list round-trip (needs build)
 node basket-test.mjs   # live budget_basket specials basket across stores (needs build)
+XDG_CONFIG_HOME=$(mktemp -d) node countdown-guest-test.mjs  # anonymous Woolworths reads (needs build; temp config dir forces the guest path)
 ```
 
 There is no test framework or linter — verification is `npm run typecheck` plus the standalone `*.mjs` smoke scripts (which hit live provider APIs).
@@ -29,7 +30,7 @@ Provider-plugin design: MCP tools are provider-agnostic and dispatch by an optio
 - `src/core/provider.ts` — `ShoppingProvider` interface (the contract) and `ProviderRegistry`. Optional capabilities (`listStores`/`setStore`) are optional methods; unsupported capabilities throw, which surfaces as a tool error.
 - `src/core/types.ts` — shared domain types (`Product`, `Cart`, `ProductList`, …) that providers normalize their native APIs into.
 - `src/providers/index.ts` — `buildRegistry()` registers all providers; `DEFAULT_PROVIDER`.
-- `src/providers/countdown/` — authenticated provider. `login.ts` opens a real Playwright browser (persistent profile, user signs in themselves, no password stored); `session.ts` stores captured cookies + XSRF token; API calls are plain `fetch()` afterwards, with silent headless refresh when tokens go stale. Only provider with a **writable cart** (`cartAdd/Update/Remove/Get` plus batch `cartAddMany`/`cartClear`/`reorderUsuals`). Cart-write is Countdown-only; **checkout, delivery-slot booking and payment are deliberately out of scope** — the batch results carry a `reviewUrl` (the trolley page) and the shopper finishes there. The server instructions encode this hard boundary.
+- `src/providers/countdown/` — hybrid provider. Reads (search/specials/browse) work **anonymously**: `guestSession.ts` mints a guest session (curl homepage GET, XSRF cookie, ~25 min TTL, in-memory) priced at Woolworths' default IP-located store; a logged-in session takes precedence and prices at the shopper's own store. Account features need login: `login.ts` opens a real Playwright browser (persistent profile, user signs in themselves, no password stored); `session.ts` stores captured cookies + XSRF token; API calls are plain `fetch()` afterwards, with silent headless refresh when tokens go stale. Only provider with a **writable cart** (`cartAdd/Update/Remove/Get` plus batch `cartAddMany`/`cartClear`/`reorderUsuals`). Cart-write is Countdown-only; **checkout, delivery-slot booking and payment are deliberately out of scope** — the batch results carry a `reviewUrl` (the trolley page) and the shopper finishes there. The server instructions encode this hard boundary.
 - `src/providers/foodstuffs/` — one `FoodstuffsProvider` class parameterized by a banner config (`banners.ts` defines New World and Pak'nSave). Anonymous guest token minted by loading the store homepage **via `curl`** (Cloudflare rejects Node's `fetch` for that page), cached ~30 min. Pricing is per-store; the selected store is persisted per provider.
 - `src/providers/shopify/` — generic `ShopifyProvider` over any Shopify storefront's public JSON (`products.json`, `collections.json`, `search/suggest.json`); `stores.ts` defines Ceres. Read-only, anonymous. Search uses `suggest.json` fast-path (≤10, no unit price) and falls back to a cached full-catalog crawl for larger/specials queries; specials = variant `compare_at_price > price`.
 - `src/providers/woocommerce/` — generic `WooCommerceProvider` over the public `wc/store/v1` REST API; `stores.ts` defines Naturally Organic. Read-only, anonymous; specials via `on_sale=true`; totals from the `X-WP-Total` header. Uses the `curl` helper (host serves a broken TLS chain).
