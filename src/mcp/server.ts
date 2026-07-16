@@ -1,6 +1,7 @@
 import { createRequire } from 'node:module';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
+import { budgetBasket } from '../core/budgetBasket.js';
 import { compareList } from '../core/compareList.js';
 import type { ProviderRegistry, ShoppingProvider } from '../core/provider.js';
 import { getList, saveList } from '../core/shoppingList.js';
@@ -70,6 +71,15 @@ export function buildServer(registry: ProviderRegistry = buildRegistry()): McpSe
         '  when not logged in) rather than hiding them.',
         '- `save_list` / `get_list` store the shopper\'s regular list so it can be reused and fed',
         '  straight into `compare_list`.',
+        '',
+        'BUDGET SPECIALS BASKET ("what can $X buy to feed people"):',
+        '',
+        '- Use `budget_basket` with the shopper\'s stores and a budget (default $100). It returns a',
+        '  best-value basket of current specials that fills the budget across categories, cheapest',
+        '  store per item. It does NOT know how many people it feeds — YOU estimate servings/meals',
+        '  from the item names, pack sizes and quantities, group items into meals, and adjust',
+        '  quantities or swap items to cover the number of people the shopper named. Call out the',
+        '  total, the leftover, and any skipped (unavailable) store.',
         '',
         'DELEGATED SHOPPING (building a cart from a list, Countdown only):',
         '',
@@ -300,6 +310,52 @@ export function buildServer(registry: ProviderRegistry = buildRegistry()): McpSe
     async ({ items, stores }) => {
       try {
         return textResult(await compareList(registry, items, stores));
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  const storesSchema = z
+    .array(
+      z.object({
+        provider: z.string().describe('Provider id: newworld, paknsave, countdown, or warehouse.'),
+        storeId: z
+          .string()
+          .optional()
+          .describe('Store id (required for newworld/paknsave; from list_stores).'),
+        label: z.string().optional().describe('Optional display label.'),
+      }),
+    )
+    .max(5);
+
+  server.registerTool(
+    'budget_basket',
+    {
+      description:
+        'Suggest a best-value basket of current SPECIALS that fills a budget (default $100) ' +
+        'without exceeding it, pooling specials across up to 5 stores and keeping the cheapest ' +
+        'store per item, balanced across categories (cheapest per-unit first). Returns the ' +
+        'basket, total, leftover, and a per-category breakdown. It does NOT estimate how many ' +
+        'people it feeds — reason about servings from the item names/sizes and adjust ' +
+        'quantities or swap items to suit the number of people. Foodstuffs stores need a ' +
+        'storeId; countdown needs login; a store that cannot be priced is skipped.',
+      inputSchema: {
+        stores: storesSchema.describe('Up to 5 stores to pull specials from.'),
+        budget: z.number().optional().describe('Target spend in dollars (default: 100).'),
+        maxItems: z.number().optional().describe('Max distinct items in the basket (default: 40).'),
+        excludeCategories: z
+          .array(z.string())
+          .optional()
+          .describe(
+            'Category substrings to drop (default: non-food aisles like household, pet, ' +
+              'health & body, baby, alcohol). Pass [] to include every category.',
+          ),
+      },
+    },
+    async ({ stores, budget, maxItems, excludeCategories }) => {
+      try {
+        return textResult(await budgetBasket(registry, stores, { budget, maxItems, excludeCategories }));
       } catch (err) {
         return errorResult(err);
       }
