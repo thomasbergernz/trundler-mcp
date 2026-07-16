@@ -117,14 +117,16 @@ const sendBtn = document.getElementById('send');
 const composer = document.getElementById('composer');
 const loginPill = document.getElementById('loginPill');
 const settingsBtn = document.getElementById('settingsBtn');
+const newBtn = document.getElementById('newBtn');
 const dialog = document.getElementById('settingsDialog');
 
-const history = []; // {role:'user'|'assistant', content}
+const welcomeHTML = welcome ? welcome.outerHTML : '';
+let history = []; // {role:'user'|'assistant', content}
 
 function scrollDown() { chat.scrollTop = chat.scrollHeight; }
 
 function addBubble(role) {
-  welcome?.remove();
+  document.getElementById('welcome')?.remove();
   const wrap = document.createElement('div');
   wrap.className = 'msg ' + role;
   wrap.innerHTML = `<div class="who">${role === 'user' ? '🧑' : '🛒'}</div><div class="body"></div>`;
@@ -249,19 +251,36 @@ input.addEventListener('input', () => {
   input.style.height = 'auto';
   input.style.height = Math.min(input.scrollHeight, 180) + 'px';
 });
-document.querySelectorAll('.chip').forEach((c) =>
-  c.addEventListener('click', () => { send(c.textContent); }));
+function wireChips() {
+  document.querySelectorAll('.chip').forEach((c) =>
+    c.addEventListener('click', () => { send(c.textContent); }));
+}
+wireChips();
+
+// ---------- new session ----------
+function newSession() {
+  if (busy) return;
+  history = [];
+  chat.innerHTML = welcomeHTML;
+  wireChips();
+  input.value = '';
+  input.style.height = 'auto';
+  input.focus();
+}
+newBtn.addEventListener('click', newSession);
 
 // ---------- login pill ----------
 async function refreshLogin() {
   try {
     const s = await (await fetch('/api/login-status')).json();
     if (s.isLoggedIn) {
-      loginPill.textContent = 'Woolworths: ' + (s.email || 'signed in');
+      loginPill.textContent = '⏻ Log out · ' + (s.email || 'Woolworths');
+      loginPill.title = 'Signed in to Woolworths — click to log out';
       loginPill.classList.add('in');
       loginPill.dataset.state = 'in';
     } else {
       loginPill.textContent = 'Log in to Woolworths';
+      loginPill.title = 'Open a browser window to sign in to Woolworths';
       loginPill.classList.remove('in');
       loginPill.dataset.state = 'out';
     }
@@ -273,6 +292,9 @@ async function refreshLogin() {
 loginPill.addEventListener('click', async () => {
   if (loginPill.classList.contains('busy')) return;
   const state = loginPill.dataset.state;
+  if (state === 'in' && !confirm('Log out of Woolworths? You will need to sign in again to price Woolworths.')) {
+    return;
+  }
   loginPill.classList.add('busy');
   try {
     if (state === 'in') {
