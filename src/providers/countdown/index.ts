@@ -20,6 +20,7 @@ import type {
   Unit,
 } from '../../core/types.js';
 import { COUNTDOWN } from './constants.js';
+import { mintGuestTokens } from './guestSession.js';
 import { interactiveLogin, silentRefresh } from './login.js';
 import { isExpired, verifyTokens } from './session.js';
 
@@ -40,6 +41,8 @@ export class CountdownProvider implements ShoppingProvider {
 
   private readonly store = new TokenStore(COUNTDOWN.id);
   private cache: Tokens | null = null;
+  /** Anonymous guest session for read-only calls; in-memory only (short TTL). */
+  private guestCache: Tokens | null = null;
 
   // --- Authentication -------------------------------------------------------
 
@@ -78,15 +81,40 @@ export class CountdownProvider implements ShoppingProvider {
     }
   }
 
+  /** Anonymous session for reads; minted lazily and re-minted on expiry. */
+  private async getGuestTokens(): Promise<Tokens> {
+    if (this.guestCache && !isExpired(this.guestCache)) return this.guestCache;
+    const minted = await mintGuestTokens();
+    this.guestCache = minted;
+    return minted;
+  }
+
+  /**
+   * Tokens for read-only calls (search/specials/browse): prefer the logged-in
+   * session (prices then follow the shopper's own store context), fall back to
+   * an anonymous guest session bound to Woolworths' default store. Cart and
+   * order history never use this — a guest has neither.
+   */
+  private async getReadTokens(): Promise<Tokens> {
+    try {
+      return await this.getTokens();
+    } catch {
+      return this.getGuestTokens();
+    }
+  }
+
   // --- Low-level API helpers ------------------------------------------------
 
-  private async callApi(endpoint: string, method = 'GET', body?: unknown): Promise<unknown> {
-    const tokens = await this.getTokens();
+  private async callApi(
+    endpoint: string,
+    opts: { method?: string; body?: unknown; auth?: 'read' | 'user' } = {},
+  ): Promise<unknown> {
+    const tokens = opts.auth === 'read' ? await this.getReadTokens() : await this.getTokens();
     const url = endpoint.startsWith('http') ? endpoint : `${COUNTDOWN.origin}${endpoint}`;
     const res = await fetch(url, {
-      method,
+      method: opts.method ?? 'GET',
       headers: { ...COUNTDOWN.headers, Cookie: filterCookies(tokens.cookies) },
-      body: body ? JSON.stringify(body) : undefined,
+      body: opts.body ? JSON.stringify(opts.body) : undefined,
     });
     if (!res.ok) {
       return { error: true, status: res.status, statusText: res.statusText } satisfies ApiError;
@@ -126,7 +154,7 @@ export class CountdownProvider implements ShoppingProvider {
       query,
     )}&inStockProductsOnly=${inStock}&size=${limit}`;
 
-    const res = await this.callApi(url);
+    const res = await this.callApi(url, { auth: 'read' });
     if (isApiError(res)) throw apiError('Search failed', res);
 
     const payload = res as ProductsPayload;
@@ -152,7 +180,7 @@ export class CountdownProvider implements ShoppingProvider {
 
     while (collected.length < maxLimit) {
       const url = `/api/v1/products?target=specials&useRankedSpecials=true&page=${page}&size=${perPage}`;
-      const res = await this.callApi(url);
+      const res = await this.callApi(url, { auth: 'read' });
       if (isApiError(res)) {
         if (collected.length > 0) break;
         throw apiError('Failed to fetch specials', res);
@@ -187,7 +215,7 @@ export class CountdownProvider implements ShoppingProvider {
 
     while (collected.length < maxLimit) {
       const url = `/api/v1/products?target=browse&${filterParam}&inStockProductsOnly=false&size=${perPage}&page=${page}`;
-      const res = await this.callApi(url);
+      const res = await this.callApi(url, { auth: 'read' });
       if (isApiError(res)) {
         if (collected.length > 0) break;
         throw apiError('Failed to browse products', res);
