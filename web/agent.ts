@@ -29,6 +29,10 @@ const PREAMBLE = [
 
 const MAX_ROUNDS = 8;
 
+/** Filler phrases a stalling model emits instead of calling a tool. */
+const STALL_RE =
+  /\b(wait|moment|hold on|retriev|fetch|look(ing)?\s*up|checking|one\s*sec|give me|shortly|in a bit)\b/i;
+
 /** One completion round, retrying once on a malformed-tool-call format error
  *  (intermittent on Groq's Llama models). Re-throws after the retry. */
 async function chatWithRetry(
@@ -107,16 +111,34 @@ export async function runAgent(
   const system = (await instructions()) + '\n' + PREAMBLE + '\n' + locationContext(settings);
   const messages: ChatMessage[] = [{ role: 'system', content: system }, ...history];
 
+  let toolsCalled = 0;
+  let nudges = 0;
+
   for (let round = 0; round < MAX_ROUNDS; round++) {
     const assistant = await chatWithRetry(settings, messages, tools, emit);
     messages.push(assistant);
 
     const calls = assistant.tool_calls ?? [];
     if (calls.length === 0) {
+      // A weak model sometimes ends its turn with a "hold on, fetching…"
+      // message WITHOUT calling the tool. If nothing has been fetched yet and
+      // the text reads like a stall, nudge it to actually run the tools.
+      if (toolsCalled === 0 && nudges < 2 && STALL_RE.test(assistant.content ?? '')) {
+        nudges++;
+        emit('thinking', { tools: ['nudging model to run the tools'] });
+        messages.push({
+          role: 'user',
+          content:
+            'Do it now: call the necessary tools and return the actual results in ' +
+            'this reply. Do not say you will fetch them or ask the user to wait — fetch them.',
+        });
+        continue;
+      }
       emit('message', { content: assistant.content ?? '' });
       return;
     }
 
+    toolsCalled += calls.length;
     emit('thinking', { tools: calls.map((c) => c.function.name) });
 
     for (const tc of calls) {
