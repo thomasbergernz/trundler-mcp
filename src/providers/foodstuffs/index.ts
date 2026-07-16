@@ -224,7 +224,7 @@ export class FoodstuffsProvider implements ShoppingProvider {
       ? `stores:${storeId} AND onPromotion:${storeId}`
       : `stores:${storeId}`;
     const { products, totalAvailable } = await this.collect(storeId, query, filters, max);
-    return { query, totalAvailable, count: products.length, products };
+    return { query, totalAvailable, count: products.length, products, storeId };
   }
 
   async getSpecials(opts: SpecialsOptions = {}): Promise<ProductList> {
@@ -232,7 +232,7 @@ export class FoodstuffsProvider implements ShoppingProvider {
     const max = opts.maxProducts ?? 120;
     const filters = `stores:${storeId} AND onPromotion:${storeId}`;
     const { products, totalAvailable } = await this.collect(storeId, '', filters, max);
-    return { totalAvailable, count: products.length, products };
+    return { totalAvailable, count: products.length, products, storeId };
   }
 
   async browseProducts(department: string, opts: BrowseOptions = {}): Promise<ProductList> {
@@ -241,7 +241,7 @@ export class FoodstuffsProvider implements ShoppingProvider {
     let filters = `stores:${storeId} AND category0NI:"${department}"`;
     if (opts.specialsOnly) filters += ` AND onPromotion:${storeId}`;
     const { products, totalAvailable } = await this.collect(storeId, '', filters, max);
-    return { department, totalAvailable, count: products.length, products };
+    return { department, totalAvailable, count: products.length, products, storeId };
   }
 
   private mapProduct(p: RawNwProduct): Product {
