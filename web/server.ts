@@ -43,18 +43,21 @@ app.post('/api/settings', async (req, res) => {
   if (typeof model === 'string' && model.trim()) patch.model = model.trim();
   if (typeof apiKey === 'string' && apiKey.length > 0) patch.apiKey = apiKey;
   if (typeof region === 'string') patch.region = region.trim();
-  if (Array.isArray(stores)) {
-    patch.stores = stores
-      .filter((s) => s && typeof s.provider === 'string')
-      .slice(0, 5)
-      .map((s) => ({
-        provider: String(s.provider),
-        storeId: typeof s.storeId === 'string' ? s.storeId : undefined,
-        label: typeof s.label === 'string' ? s.label : undefined,
-      }));
-  }
+  if (Array.isArray(stores)) patch.stores = sanitizeStores(stores);
   res.json(publicSettings(await saveConfig(patch)));
 });
+
+function sanitizeStores(input: unknown): Array<{ provider: string; storeId?: string; label?: string }> {
+  if (!Array.isArray(input)) return [];
+  return input
+    .filter((s) => s && typeof s.provider === 'string')
+    .slice(0, 5)
+    .map((s) => ({
+      provider: String(s.provider),
+      storeId: typeof s.storeId === 'string' ? s.storeId : undefined,
+      label: typeof s.label === 'string' ? s.label : undefined,
+    }));
+}
 
 // --- Store lookup for the Settings picker ---
 app.get('/api/stores', async (req, res) => {
@@ -124,7 +127,11 @@ app.post('/api/chat', async (req, res) => {
       return res.end();
     }
 
-    await runAgent(history, cfg, emit);
+    // Temporary per-chat store override — not persisted to web.json.
+    const override = sanitizeStores(req.body?.storesOverride);
+    const effective = override.length > 0 ? { ...cfg, stores: override } : cfg;
+
+    await runAgent(history, effective, emit);
     emit('done');
     res.end();
   } catch (err) {

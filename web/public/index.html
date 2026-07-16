@@ -28,6 +28,12 @@
       </div>
     </main>
 
+    <div id="scopeBar" class="scopebar">
+      <span id="scopeText" class="scope-text">Stores: …</span>
+      <button id="scopeEdit" type="button" class="scope-btn">Stores for this chat</button>
+      <button id="scopeReset" type="button" class="scope-btn" hidden>Reset to pinned</button>
+    </div>
+
     <form id="composer" class="composer">
       <textarea id="input" rows="1" placeholder="Ask about prices, specials, a shopping list…" autocomplete="off"></textarea>
       <button id="send" type="submit">Send</button>
@@ -82,6 +88,35 @@
         <div class="row-end">
           <button type="button" id="cancelSettings" class="ghost">Close</button>
           <button id="saveSettings" value="save">Save</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- Temporary per-chat store override -->
+    <dialog id="scopeDialog">
+      <form method="dialog" class="settings">
+        <h2>Stores for this chat</h2>
+        <p class="hint">Overrides your pinned stores for this conversation only — not saved. Reset returns to your pinned stores.</p>
+        <div class="storepick">
+          <div class="storepick-search">
+            <select id="scProvider">
+              <option value="newworld">New World</option>
+              <option value="paknsave">Pak'nSave</option>
+            </select>
+            <input id="scQuery" type="text" placeholder="suburb or town" />
+            <button type="button" id="scSearchBtn" class="ghost">Search</button>
+          </div>
+          <ul id="scResults" class="store-results"></ul>
+          <div class="toggles">
+            <label class="chk"><input type="checkbox" id="scTglCountdown" /> Woolworths (national)</label>
+            <label class="chk"><input type="checkbox" id="scTglWarehouse" /> The Warehouse (national)</label>
+          </div>
+          <div id="scSelected" class="selected-stores"></div>
+          <p class="hint" id="scHint"></p>
+        </div>
+        <div class="row-end">
+          <button type="button" id="scCancel" class="ghost">Cancel</button>
+          <button id="scApply" value="apply">Use for this chat</button>
         </div>
       </form>
     </dialog>

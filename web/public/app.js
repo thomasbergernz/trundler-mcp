@@ -122,6 +122,7 @@ const dialog = document.getElementById('settingsDialog');
 
 const welcomeHTML = welcome ? welcome.outerHTML : '';
 let history = []; // {role:'user'|'assistant', content}
+let sessionOverride = null; // per-chat store override; null => use pinned/region
 
 function scrollDown() { chat.scrollTop = chat.scrollHeight; }
 
@@ -159,7 +160,10 @@ async function send(text) {
     const res = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages: history }),
+      body: JSON.stringify({
+        messages: history,
+        storesOverride: sessionOverride || undefined,
+      }),
     });
     if (!res.ok || !res.body) throw new Error('chat request failed (' + res.status + ')');
 
@@ -261,6 +265,8 @@ wireChips();
 function newSession() {
   if (busy) return;
   history = [];
+  sessionOverride = null;
+  updateScopeBar();
   chat.innerHTML = welcomeHTML;
   wireChips();
   input.value = '';
@@ -308,123 +314,175 @@ loginPill.addEventListener('click', async () => {
   refreshLogin();
 });
 
-// ---------- settings ----------
-let selectedStores = []; // {provider, storeId?, label?}
+// ---------- store picker factory (shared by Settings + per-chat override) ----------
 const NATIONAL = { countdown: 'Woolworths', warehouse: 'The Warehouse' };
-
 const storeKey = (s) => s.provider + '|' + (s.storeId || '');
+const byId = (id) => document.getElementById(id);
 
-function syncToggles() {
-  document.getElementById('tglCountdown').checked =
-    selectedStores.some((s) => s.provider === 'countdown');
-  document.getElementById('tglWarehouse').checked =
-    selectedStores.some((s) => s.provider === 'warehouse');
-}
-
-function renderSelected() {
-  const box = document.getElementById('selectedStores');
-  box.innerHTML = '';
-  for (const s of selectedStores) {
-    const chip = document.createElement('span');
-    chip.className = 'store-chip';
-    chip.textContent = s.label || s.provider;
-    const x = document.createElement('button');
-    x.type = 'button';
-    x.textContent = '✕';
-    x.addEventListener('click', () => removeStore(storeKey(s)));
-    chip.appendChild(x);
-    box.appendChild(chip);
-  }
-  document.getElementById('storeHint').textContent =
-    `${selectedStores.length}/5 stores pinned. Pinned stores override region.`;
-  syncToggles();
-}
-
-function addStore(s) {
-  if (selectedStores.length >= 5) { alert('Up to 5 stores.'); return false; }
-  if (selectedStores.some((x) => storeKey(x) === storeKey(s))) return false;
-  selectedStores.push(s);
-  renderSelected();
-  return true;
-}
-function removeStore(key) {
-  selectedStores = selectedStores.filter((s) => storeKey(s) !== key);
-  renderSelected();
-}
-
-document.getElementById('storeSearchBtn').addEventListener('click', async () => {
-  const provider = document.getElementById('storeProvider').value;
-  const query = document.getElementById('storeQuery').value.trim();
-  const ul = document.getElementById('storeResults');
-  ul.innerHTML = '<li class="muted">searching…</li>';
-  try {
-    const url = '/api/stores?provider=' + provider + (query ? '&query=' + encodeURIComponent(query) : '');
-    const data = await (await fetch(url)).json();
-    ul.innerHTML = '';
-    if (!data.stores?.length) { ul.innerHTML = '<li class="muted">no matches</li>'; return; }
-    for (const st of data.stores.slice(0, 25)) {
-      const li = document.createElement('li');
-      const name = document.createElement('span');
-      name.textContent = st.name + (st.suburb ? ' · ' + st.suburb : '');
-      const add = document.createElement('button');
-      add.type = 'button';
-      add.textContent = 'Add';
-      add.addEventListener('click', () =>
-        addStore({ provider, storeId: st.id, label: st.name }));
-      li.append(name, add);
-      ul.appendChild(li);
+function createPicker(ids) {
+  let stores = [];
+  const sync = () => {
+    byId(ids.tglC).checked = stores.some((s) => s.provider === 'countdown');
+    byId(ids.tglW).checked = stores.some((s) => s.provider === 'warehouse');
+  };
+  const render = () => {
+    const box = byId(ids.selected);
+    box.innerHTML = '';
+    for (const s of stores) {
+      const chip = document.createElement('span');
+      chip.className = 'store-chip';
+      chip.textContent = s.label || s.provider;
+      const x = document.createElement('button');
+      x.type = 'button';
+      x.textContent = '✕';
+      x.addEventListener('click', () => remove(storeKey(s)));
+      chip.appendChild(x);
+      box.appendChild(chip);
     }
-  } catch {
-    ul.innerHTML = '<li class="muted">lookup failed</li>';
-  }
-});
+    byId(ids.hint).textContent = `${stores.length}/5 ${ids.hintSuffix}`;
+    sync();
+  };
+  const add = (s) => {
+    if (stores.length >= 5) { alert('Up to 5 stores.'); return false; }
+    if (stores.some((x) => storeKey(x) === storeKey(s))) return false;
+    stores.push(s);
+    render();
+    return true;
+  };
+  const remove = (key) => { stores = stores.filter((s) => storeKey(s) !== key); render(); };
 
-function wireToggle(id, provider) {
-  document.getElementById(id).addEventListener('change', (e) => {
-    if (e.target.checked) {
-      if (!addStore({ provider, label: NATIONAL[provider] })) e.target.checked = false;
-    } else {
-      removeStore(provider + '|');
+  byId(ids.searchBtn).addEventListener('click', async () => {
+    const provider = byId(ids.provider).value;
+    const query = byId(ids.query).value.trim();
+    const ul = byId(ids.results);
+    ul.innerHTML = '<li class="muted">searching…</li>';
+    try {
+      const url = '/api/stores?provider=' + provider + (query ? '&query=' + encodeURIComponent(query) : '');
+      const data = await (await fetch(url)).json();
+      ul.innerHTML = '';
+      if (!data.stores?.length) { ul.innerHTML = '<li class="muted">no matches</li>'; return; }
+      for (const st of data.stores.slice(0, 25)) {
+        const li = document.createElement('li');
+        const name = document.createElement('span');
+        name.textContent = st.name + (st.suburb ? ' · ' + st.suburb : '');
+        const addb = document.createElement('button');
+        addb.type = 'button';
+        addb.textContent = 'Add';
+        addb.addEventListener('click', () => add({ provider, storeId: st.id, label: st.name }));
+        li.append(name, addb);
+        ul.appendChild(li);
+      }
+    } catch {
+      ul.innerHTML = '<li class="muted">lookup failed</li>';
     }
   });
+
+  const wireTgl = (id, provider) =>
+    byId(id).addEventListener('change', (e) => {
+      if (e.target.checked) { if (!add({ provider, label: NATIONAL[provider] })) e.target.checked = false; }
+      else remove(provider + '|');
+    });
+  wireTgl(ids.tglC, 'countdown');
+  wireTgl(ids.tglW, 'warehouse');
+
+  return {
+    get: () => stores.slice(),
+    set: (a) => { stores = Array.isArray(a) ? a.slice() : []; byId(ids.results).innerHTML = ''; render(); },
+  };
 }
-wireToggle('tglCountdown', 'countdown');
-wireToggle('tglWarehouse', 'warehouse');
+
+const settingsPicker = createPicker({
+  provider: 'storeProvider', query: 'storeQuery', searchBtn: 'storeSearchBtn', results: 'storeResults',
+  tglC: 'tglCountdown', tglW: 'tglWarehouse', selected: 'selectedStores', hint: 'storeHint',
+  hintSuffix: 'stores pinned. Pinned override region.',
+});
+const scopePicker = createPicker({
+  provider: 'scProvider', query: 'scQuery', searchBtn: 'scSearchBtn', results: 'scResults',
+  tglC: 'scTglCountdown', tglW: 'scTglWarehouse', selected: 'scSelected', hint: 'scHint',
+  hintSuffix: 'stores for this chat.',
+});
+
+// ---------- settings ----------
+let pinnedStores = [];
+let savedRegion = '';
+
+async function refreshSettingsCache() {
+  const s = await (await fetch('/api/settings')).json();
+  pinnedStores = Array.isArray(s.stores) ? s.stores : [];
+  savedRegion = s.region || '';
+  updateScopeBar();
+  return s;
+}
 
 async function loadSettings() {
-  const s = await (await fetch('/api/settings')).json();
-  document.getElementById('providerSel').value = s.provider;
-  document.getElementById('modelInput').value = s.model;
-  document.getElementById('regionInput').value = s.region || '';
-  document.getElementById('keyHint').textContent = s.hasKey
+  const s = await refreshSettingsCache();
+  byId('providerSel').value = s.provider;
+  byId('modelInput').value = s.model;
+  byId('regionInput').value = s.region || '';
+  byId('keyHint').textContent = s.hasKey
     ? 'A key is saved. Leave blank to keep it.'
     : 'No key saved yet — paste one to start.';
-  selectedStores = Array.isArray(s.stores) ? s.stores.slice() : [];
-  document.getElementById('storeResults').innerHTML = '';
-  renderSelected();
+  settingsPicker.set(s.stores || []);
 }
 settingsBtn.addEventListener('click', async () => { await loadSettings(); dialog.showModal(); });
-document.getElementById('cancelSettings').addEventListener('click', () => dialog.close());
-document.getElementById('saveSettings').addEventListener('click', async (e) => {
+byId('cancelSettings').addEventListener('click', () => dialog.close());
+byId('saveSettings').addEventListener('click', async (e) => {
   e.preventDefault();
   const payload = {
-    provider: document.getElementById('providerSel').value,
-    model: document.getElementById('modelInput').value,
-    apiKey: document.getElementById('keyInput').value,
-    region: document.getElementById('regionInput').value,
-    stores: selectedStores,
+    provider: byId('providerSel').value,
+    model: byId('modelInput').value,
+    apiKey: byId('keyInput').value,
+    region: byId('regionInput').value,
+    stores: settingsPicker.get(),
   };
   await fetch('/api/settings', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
-  document.getElementById('keyInput').value = '';
+  byId('keyInput').value = '';
   dialog.close();
+  refreshSettingsCache();
 });
+
+// ---------- per-chat store override ----------
+const labelsOf = (list) => list.map((s) => s.label || s.provider).join(', ');
+
+function updateScopeBar() {
+  const reset = byId('scopeReset');
+  const text = byId('scopeText');
+  if (sessionOverride && sessionOverride.length) {
+    text.textContent = 'This chat: ' + labelsOf(sessionOverride);
+    reset.hidden = false;
+  } else if (pinnedStores.length) {
+    text.textContent = 'Stores: ' + labelsOf(pinnedStores);
+    reset.hidden = true;
+  } else if (savedRegion) {
+    text.textContent = 'Region: ' + savedRegion;
+    reset.hidden = true;
+  } else {
+    text.textContent = "No stores set — I'll ask, or pin some in ⚙️";
+    reset.hidden = true;
+  }
+}
+
+byId('scopeEdit').addEventListener('click', () => {
+  scopePicker.set(sessionOverride ?? pinnedStores);
+  byId('scopeDialog').showModal();
+});
+byId('scCancel').addEventListener('click', () => byId('scopeDialog').close());
+byId('scApply').addEventListener('click', (e) => {
+  e.preventDefault();
+  const chosen = scopePicker.get();
+  sessionOverride = chosen.length ? chosen : null;
+  updateScopeBar();
+  byId('scopeDialog').close();
+});
+byId('scopeReset').addEventListener('click', () => { sessionOverride = null; updateScopeBar(); });
 
 // ---------- boot ----------
 refreshLogin();
+refreshSettingsCache();
 // nudge the user to set a key on first run
 (async () => {
   const s = await (await fetch('/api/settings')).json();

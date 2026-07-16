@@ -45,6 +45,14 @@ next sign-in is quick.
 
 New World, Pak'nSave and The Warehouse need no login.
 
+### Stores
+
+Pin your usual stores in **⚙️ Settings → Location** (a region, or up to 5 named
+branches + Woolworths/Warehouse toggles) so the assistant stops asking where you
+are. To price against a different set just for the current conversation, use the
+**Stores for this chat** bar above the message box — it overrides your pinned
+stores without saving, and **Reset to pinned** / **＋ New** clears it.
+
 ## How it works
 
 - `mcpBridge.ts` boots the real `buildServer()` and connects an in-process MCP
