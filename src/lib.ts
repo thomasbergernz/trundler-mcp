@@ -8,6 +8,18 @@ export { buildServer } from './mcp/server.js';
 export { buildRegistry, DEFAULT_PROVIDER } from './providers/index.js';
 export { ProviderRegistry } from './core/provider.js';
 export { TokenStore } from './core/tokenStore.js';
+export { compareList } from './core/compareList.js';
+export { getList, saveList } from './core/shoppingList.js';
+
+export type {
+  CompareItem,
+  CompareOptions,
+  CompareResult,
+  ItemAtStore,
+  MatchInfo,
+  StoreColumn,
+  StoreSelector,
+} from './core/compareList.js';
 
 export type {
   BrowseOptions,
