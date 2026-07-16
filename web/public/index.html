@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Trundler — grocery pricing</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">🛒 Trundler</div>
+      <div class="actions">
+        <button id="loginPill" class="pill" title="Woolworths session">Woolworths: …</button>
+        <button id="settingsBtn" class="icon-btn" title="Settings">⚙️</button>
+      </div>
+    </header>
+
+    <main id="chat" class="chat">
+      <div id="welcome" class="welcome">
+        <h1>Price groceries across NZ stores</h1>
+        <p>Ask in plain English. I can search, compare stores near you, and build a budget basket of specials.</p>
+        <div class="chips">
+          <button class="chip">find 1L Sunflower Oil price for shops close to me</button>
+          <button class="chip">what do you need to add Woolworths to the mix?</button>
+          <button class="chip">what do $100 of specials buy me?</button>
+        </div>
+      </div>
+    </main>
+
+    <form id="composer" class="composer">
+      <textarea id="input" rows="1" placeholder="Ask about prices, specials, a shopping list…" autocomplete="off"></textarea>
+      <button id="send" type="submit">Send</button>
+    </form>
+
+    <!-- Settings dialog -->
+    <dialog id="settingsDialog">
+      <form method="dialog" class="settings">
+        <h2>LLM settings</h2>
+        <label>Provider
+          <select id="providerSel">
+            <option value="groq">Groq (free)</option>
+            <option value="openrouter">OpenRouter (free)</option>
+          </select>
+        </label>
+        <label>Model
+          <input id="modelInput" type="text" placeholder="llama-3.3-70b-versatile" />
+        </label>
+        <label>API key
+          <input id="keyInput" type="password" placeholder="paste free API key (kept on this machine)" />
+        </label>
+        <p class="hint" id="keyHint"></p>
+        <p class="hint">Pick a <strong>tool-capable</strong> model. Groq default works; some OpenRouter free models don't support tool calling.</p>
+        <div class="row-end">
+          <button value="cancel" class="ghost">Close</button>
+          <button id="saveSettings" value="save">Save</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="app.js"></script>
+  </body>
+</html>
