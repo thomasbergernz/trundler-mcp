@@ -148,10 +148,13 @@ async function send(text) {
   const userBody = addBubble('user');
   userBody.textContent = text;
 
+  sendBtn.textContent = '⋯';
+  sendBtn.classList.add('working');
+
   const body = addBubble('assistant');
   const status = document.createElement('div');
   status.className = 'status';
-  status.innerHTML = '<span class="dot">●</span> thinking…';
+  setStatus(status, 'thinking…');
   body.appendChild(status);
 
   let finalContent = '';
@@ -191,31 +194,38 @@ async function send(text) {
     if (finalContent) history.push({ role: 'assistant', content: finalContent });
     busy = false;
     sendBtn.disabled = false;
+    sendBtn.textContent = 'Send';
+    sendBtn.classList.remove('working');
     scrollDown();
   }
+}
+
+/** Transient progress line: animated spinner + text (HTML allowed for <em>). */
+function setStatus(status, html) {
+  status.innerHTML = '<span class="spinner"></span><span class="txt">' + html + '</span>';
 }
 
 function handleEvent(evt, status, body, setFinal) {
   switch (evt.event) {
     case 'thinking':
-      status.innerHTML = '<span class="dot">●</span> planning' +
-        (evt.tools?.length ? ' — ' + evt.tools.join(', ') : '') + '…';
+      setStatus(status, 'planning' +
+        (evt.tools?.length ? ' — ' + escapeHtml(evt.tools.join(', ')) : '') + '…');
       break;
     case 'tool_call':
-      status.innerHTML = '<span class="dot">🔧</span> ' + evt.name +
-        '(' + shortArgs(evt.args) + ')…';
+      setStatus(status, '🔧 ' + escapeHtml(evt.name) + '(' + escapeHtml(shortArgs(evt.args)) + ')…');
       scrollDown();
       break;
     case 'tool_result':
-      status.innerHTML = '<span class="dot">' + (evt.isError ? '⚠️' : '✓') + '</span> ' +
-        evt.name + (evt.isError ? ' failed' : ' done');
+      setStatus(status, (evt.isError ? '⚠️ ' : '✓ ') + escapeHtml(evt.name) +
+        (evt.isError ? ' failed' : ' done') + ' — waiting for model…');
       break;
-    case 'login_required':
-      status.innerHTML += ' — <em>Woolworths needs login (top-right)</em>';
+    case 'login_required': {
+      const txt = status.querySelector('.txt');
+      if (txt) txt.innerHTML += ' — <em>Woolworths needs login (top-right)</em>';
       break;
+    }
     case 'rate_limited':
-      status.innerHTML = '<span class="dot">⏳</span> rate limit — waiting ' +
-        (evt.seconds || '?') + 's (free tier)…';
+      setStatus(status, '⏳ rate limit — waiting ' + (evt.seconds || '?') + 's (free tier)…');
       scrollDown();
       break;
     case 'message':
@@ -293,6 +303,7 @@ async function refreshLogin() {
   } catch {
     loginPill.textContent = 'Woolworths: ?';
   }
+  updateScopeBar(); // countdown labels show "(default store)" while logged out
 }
 
 let logoutArm = null; // two-step logout instead of confirm() — native dialogs
@@ -458,7 +469,18 @@ byId('saveSettings').addEventListener('click', async (e) => {
 });
 
 // ---------- per-chat store override ----------
-const labelsOf = (list) => list.map((s) => s.label || s.provider).join(', ');
+// Guest Woolworths prices come from the account-less DEFAULT (IP-located)
+// store — no branch pinning exists for countdown yet. Make that visible.
+const labelsOf = (list) =>
+  list
+    .map((s) => {
+      const base = s.label || s.provider;
+      if (s.provider === 'countdown' && loginPill.dataset.state !== 'in') {
+        return base + ' (default store)';
+      }
+      return base;
+    })
+    .join(', ');
 
 function updateScopeBar() {
   const reset = byId('scopeReset');
