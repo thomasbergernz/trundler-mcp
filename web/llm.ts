@@ -30,9 +30,23 @@ export interface ChatParams {
   model: string;
   messages: ChatMessage[];
   tools?: OpenAiTool[];
+  /** Called before waiting out a rate-limit (429) so the UI can show it. */
+  onWait?: (seconds: number) => void;
 }
 
-/** One completion round. Returns the assistant message (may contain tool_calls). */
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Seconds to wait after a 429, from the retry-after header or the body hint. */
+function retryDelay(header: string | null, body: string): number {
+  const h = header ? Number(header) : NaN;
+  if (Number.isFinite(h) && h > 0) return Math.min(h, 30);
+  const m = body.match(/try again in ([\d.]+)s/i);
+  if (m) return Math.min(Number(m[1]) + 0.5, 30);
+  return 8;
+}
+
+/** One completion round. Returns the assistant message (may contain tool_calls).
+ *  Backs off and retries on 429 (free-tier tokens-per-minute limits). */
 export async function chat(params: ChatParams): Promise<ChatMessage> {
   const base = BASE_URLS[params.provider];
   const body: Record<string, unknown> = {
@@ -45,20 +59,36 @@ export async function chat(params: ChatParams): Promise<ChatMessage> {
     body.tool_choice = 'auto';
   }
 
-  const res = await fetch(`${base}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${params.apiKey}`,
-      // OpenRouter likes these; harmless for Groq.
-      'HTTP-Referer': 'http://127.0.0.1',
-      'X-Title': 'trundler-web',
-    },
-    body: JSON.stringify(body),
-  });
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(`${base}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${params.apiKey}`,
+        // OpenRouter likes these; harmless for Groq.
+        'HTTP-Referer': 'http://127.0.0.1',
+        'X-Title': 'trundler-web',
+      },
+      body: JSON.stringify(body),
+    });
 
-  if (!res.ok) {
+    if (res.ok) {
+      const json = (await res.json()) as { choices?: Array<{ message?: ChatMessage }> };
+      const message = json.choices?.[0]?.message;
+      if (!message) throw new Error('LLM returned no message');
+      return message;
+    }
+
     const detail = await res.text().catch(() => '');
+
+    // Free-tier tokens-per-minute limit — wait out the window and retry.
+    if (res.status === 429 && attempt < 4) {
+      const wait = retryDelay(res.headers.get('retry-after'), detail);
+      params.onWait?.(wait);
+      await sleep(wait * 1000);
+      continue;
+    }
+
     // Groq returns 400 tool_use_failed when the model emits a tool call in the
     // Llama `<function=name {json}>` text format its validator can't parse. It
     // is intermittent — the caller retries once, then surfaces a clear hint.
@@ -72,11 +102,4 @@ export async function chat(params: ChatParams): Promise<ChatMessage> {
     }
     throw new Error(`LLM ${params.provider} ${res.status}: ${detail.slice(0, 500)}`);
   }
-
-  const json = (await res.json()) as {
-    choices?: Array<{ message?: ChatMessage }>;
-  };
-  const message = json.choices?.[0]?.message;
-  if (!message) throw new Error('LLM returned no message');
-  return message;
 }

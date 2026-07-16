@@ -207,6 +207,11 @@ function handleEvent(evt, status, body, setFinal) {
     case 'login_required':
       status.innerHTML += ' — <em>Woolworths needs login (top-right)</em>';
       break;
+    case 'rate_limited':
+      status.innerHTML = '<span class="dot">⏳</span> rate limit — waiting ' +
+        (evt.seconds || '?') + 's (free tier)…';
+      scrollDown();
+      break;
     case 'message':
       status.remove();
       setFinal(evt.content || '');

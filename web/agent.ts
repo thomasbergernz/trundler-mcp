@@ -44,6 +44,7 @@ async function chatWithRetry(
         model: settings.model,
         messages,
         tools,
+        onWait: (s) => emit('rate_limited', { seconds: s }),
       });
     } catch (err) {
       if ((err as { toolFormat?: boolean }).toolFormat && attempt === 0) {
