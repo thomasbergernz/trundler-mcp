@@ -17,6 +17,7 @@ npm run cli check      # verify stored session
 node smoke-test.mjs    # spawns built server over stdio, lists tools, exercises a couple (needs build + stored login)
 node pns-test.mjs      # exercises Pak'nSave provider directly against dist/ (needs build)
 node compare-test.mjs  # live multi-store compare_list + saved-list round-trip (needs build)
+node basket-test.mjs   # live budget_basket specials basket across stores (needs build)
 ```
 
 There is no test framework or linter — verification is `npm run typecheck` plus the standalone `*.mjs` smoke scripts (which hit live provider APIs).
@@ -37,6 +38,7 @@ Provider-plugin design: MCP tools are provider-agnostic and dispatch by an optio
 - `src/core/curl.ts` — shared `curlGet()` (status + headers + body) for hosts whose incomplete TLS chain Node's `fetch` rejects (`UNABLE_TO_VERIFY_LEAF_SIGNATURE`). Same no-extra-deps escape hatch as the Foodstuffs token mint.
 - `src/core/compareList.ts` — cross-provider orchestration: `compareList(registry, items, stores)` prices a keyword list across up to 5 stores (fans out `searchProducts` per item×store), picks the top relevance match + alternates, and computes per-store subtotals/coverage, cheapest-per-item, and cheapest full basket. A store that errors (e.g. Countdown not logged in) degrades to an `unavailable` column. Backs the `compare_list` tool. Matching is relevance-based, not barcode-exact (no shared EAN). Foodstuffs is priced per-branch via the per-call `SearchOptions.storeId` override (no persisted `set_store` mutation); `StoreInfo` now carries `suburb`/`latitude`/`longitude` and `listStores` filters by name/suburb/region.
 - `src/core/shoppingList.ts` — provider-agnostic saved "regular list" (`saveList`/`getList`) persisted to `<configDir>/list.json`; backs the `save_list`/`get_list` tools.
+- `src/core/budgetBasket.ts` — `budgetBasket(registry, stores, opts)` assembles a best-value basket of current specials that fills a budget (default $100) without exceeding it: pulls `getSpecials` per store (storeId override), dedupes cross-store to the cheapest offering, buckets by category and round-robins cheapest-per-unit first so the basket stays balanced. Non-food aisles (household/pet/health/baby/alcohol) are excluded by default (overridable `excludeCategories`). It does NOT estimate servings — the driving model reasons "feeds N people" from the basket. Backs the `budget_basket` tool. Note `categoryOf` uses the meaningful sub-segment of dashed SFRA paths (Warehouse `foodhouseholdpets-fooddrink-…` → `fooddrink`), never the compound root.
 - `src/mcp/server.ts` — `buildServer()` registers all tools and the server-level presentation instructions (letter labels, unit-price sorting, product links). Version is read from `package.json` at runtime.
 - Entry points: `src/index.ts` (stdio server bin), `src/cli.ts` (setup CLI), `src/lib.ts` (side-effect-free library export: `buildServer`, `buildRegistry`, types).
 
