@@ -186,3 +186,24 @@ dialog::backdrop { background: rgba(0,0,0,0.55); }
 .settings button { border-radius: 8px; padding: 9px 16px; cursor: pointer; border: 0; font-weight: 600; }
 .settings button[value="save"] { background: var(--accent); color: #08240f; }
 .settings button.ghost { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); }
+.settings h3 { margin: 4px 0 0; font-size: 14px; color: var(--text); }
+.settings hr { border: 0; border-top: 1px solid var(--line); margin: 6px 0; }
+
+.storepick { display: flex; flex-direction: column; gap: 10px; }
+.storepick-search { display: flex; gap: 8px; }
+.storepick-search select { flex: 0 0 auto; }
+.storepick-search input { flex: 1; }
+.storepick-search button { flex: 0 0 auto; }
+
+.store-results { list-style: none; margin: 0; padding: 0; max-height: 160px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+.store-results li { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); }
+.store-results li.muted { color: var(--muted); justify-content: center; }
+.store-results li button { border: 0; background: var(--accent); color: #08240f; border-radius: 6px; padding: 4px 10px; cursor: pointer; font-weight: 600; }
+
+.toggles { display: flex; gap: 16px; flex-wrap: wrap; }
+.chk { flex-direction: row !important; align-items: center; gap: 6px; color: var(--text); font-size: 13px; }
+.chk input { width: auto; }
+
+.selected-stores { display: flex; flex-wrap: wrap; gap: 8px; }
+.store-chip { display: inline-flex; align-items: center; gap: 8px; background: var(--accent-dim); color: var(--text); border: 1px solid var(--accent); border-radius: 999px; padding: 5px 6px 5px 12px; font-size: 13px; }
+.store-chip button { border: 0; background: transparent; color: var(--text); cursor: pointer; font-size: 13px; line-height: 1; padding: 0 4px; }

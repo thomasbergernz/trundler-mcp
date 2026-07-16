@@ -59,13 +59,44 @@ async function chatWithRetry(
   }
 }
 
+/** Turn the user's saved region / pinned stores into system-prompt guidance.
+ *  Explicit stores take precedence over region. */
+function locationContext(settings: WebConfig): string {
+  if (settings.stores && settings.stores.length > 0) {
+    const lines = settings.stores.map((s) => {
+      const id = s.storeId ? ` storeId=${s.storeId}` : ' (national — no storeId)';
+      return `  - provider=${s.provider}${id}${s.label ? ` (${s.label})` : ''}`;
+    });
+    return [
+      '',
+      '--- Saved stores (use these; do NOT ask for location) ---',
+      'The user has pinned these stores. Price against exactly these for',
+      'compare_list / budget_basket, and pass the matching storeId to',
+      'search_products / get_specials for the foodstuffs ones. Only deviate if',
+      'the user explicitly names different stores in the message.',
+      ...lines,
+    ].join('\n');
+  }
+  if (settings.region && settings.region.trim()) {
+    return [
+      '',
+      '--- Saved region (use this; do NOT ask for location) ---',
+      `The user's location is "${settings.region.trim()}". When they ask about`,
+      'prices near them, call list_stores with this as the query to find nearby',
+      'New World / Pak\'nSave branches (pick up to 5), then price with their',
+      'storeIds. countdown and warehouse are national.',
+    ].join('\n');
+  }
+  return '';
+}
+
 export async function runAgent(
   history: ChatMessage[],
   settings: WebConfig,
   emit: Emit,
 ): Promise<void> {
   const tools = await listOpenAiTools();
-  const system = (await instructions()) + '\n' + PREAMBLE;
+  const system = (await instructions()) + '\n' + PREAMBLE + '\n' + locationContext(settings);
   const messages: ChatMessage[] = [{ role: 'system', content: system }, ...history];
 
   for (let round = 0; round < MAX_ROUNDS; round++) {

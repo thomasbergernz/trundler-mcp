@@ -309,21 +309,110 @@ loginPill.addEventListener('click', async () => {
 });
 
 // ---------- settings ----------
+let selectedStores = []; // {provider, storeId?, label?}
+const NATIONAL = { countdown: 'Woolworths', warehouse: 'The Warehouse' };
+
+const storeKey = (s) => s.provider + '|' + (s.storeId || '');
+
+function syncToggles() {
+  document.getElementById('tglCountdown').checked =
+    selectedStores.some((s) => s.provider === 'countdown');
+  document.getElementById('tglWarehouse').checked =
+    selectedStores.some((s) => s.provider === 'warehouse');
+}
+
+function renderSelected() {
+  const box = document.getElementById('selectedStores');
+  box.innerHTML = '';
+  for (const s of selectedStores) {
+    const chip = document.createElement('span');
+    chip.className = 'store-chip';
+    chip.textContent = s.label || s.provider;
+    const x = document.createElement('button');
+    x.type = 'button';
+    x.textContent = '✕';
+    x.addEventListener('click', () => removeStore(storeKey(s)));
+    chip.appendChild(x);
+    box.appendChild(chip);
+  }
+  document.getElementById('storeHint').textContent =
+    `${selectedStores.length}/5 stores pinned. Pinned stores override region.`;
+  syncToggles();
+}
+
+function addStore(s) {
+  if (selectedStores.length >= 5) { alert('Up to 5 stores.'); return false; }
+  if (selectedStores.some((x) => storeKey(x) === storeKey(s))) return false;
+  selectedStores.push(s);
+  renderSelected();
+  return true;
+}
+function removeStore(key) {
+  selectedStores = selectedStores.filter((s) => storeKey(s) !== key);
+  renderSelected();
+}
+
+document.getElementById('storeSearchBtn').addEventListener('click', async () => {
+  const provider = document.getElementById('storeProvider').value;
+  const query = document.getElementById('storeQuery').value.trim();
+  const ul = document.getElementById('storeResults');
+  ul.innerHTML = '<li class="muted">searching…</li>';
+  try {
+    const url = '/api/stores?provider=' + provider + (query ? '&query=' + encodeURIComponent(query) : '');
+    const data = await (await fetch(url)).json();
+    ul.innerHTML = '';
+    if (!data.stores?.length) { ul.innerHTML = '<li class="muted">no matches</li>'; return; }
+    for (const st of data.stores.slice(0, 25)) {
+      const li = document.createElement('li');
+      const name = document.createElement('span');
+      name.textContent = st.name + (st.suburb ? ' · ' + st.suburb : '');
+      const add = document.createElement('button');
+      add.type = 'button';
+      add.textContent = 'Add';
+      add.addEventListener('click', () =>
+        addStore({ provider, storeId: st.id, label: st.name }));
+      li.append(name, add);
+      ul.appendChild(li);
+    }
+  } catch {
+    ul.innerHTML = '<li class="muted">lookup failed</li>';
+  }
+});
+
+function wireToggle(id, provider) {
+  document.getElementById(id).addEventListener('change', (e) => {
+    if (e.target.checked) {
+      if (!addStore({ provider, label: NATIONAL[provider] })) e.target.checked = false;
+    } else {
+      removeStore(provider + '|');
+    }
+  });
+}
+wireToggle('tglCountdown', 'countdown');
+wireToggle('tglWarehouse', 'warehouse');
+
 async function loadSettings() {
   const s = await (await fetch('/api/settings')).json();
   document.getElementById('providerSel').value = s.provider;
   document.getElementById('modelInput').value = s.model;
+  document.getElementById('regionInput').value = s.region || '';
   document.getElementById('keyHint').textContent = s.hasKey
     ? 'A key is saved. Leave blank to keep it.'
     : 'No key saved yet — paste one to start.';
+  selectedStores = Array.isArray(s.stores) ? s.stores.slice() : [];
+  document.getElementById('storeResults').innerHTML = '';
+  renderSelected();
 }
 settingsBtn.addEventListener('click', async () => { await loadSettings(); dialog.showModal(); });
+document.getElementById('cancelSettings').addEventListener('click', () => dialog.close());
 document.getElementById('saveSettings').addEventListener('click', async (e) => {
   e.preventDefault();
   const payload = {
     provider: document.getElementById('providerSel').value,
     model: document.getElementById('modelInput').value,
     apiKey: document.getElementById('keyInput').value,
+    region: document.getElementById('regionInput').value,
+    stores: selectedStores,
   };
   await fetch('/api/settings', {
     method: 'POST',

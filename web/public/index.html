@@ -36,7 +36,9 @@
     <!-- Settings dialog -->
     <dialog id="settingsDialog">
       <form method="dialog" class="settings">
-        <h2>LLM settings</h2>
+        <h2>Settings</h2>
+
+        <h3>Model</h3>
         <label>Provider
           <select id="providerSel">
             <option value="groq">Groq (free)</option>
@@ -51,8 +53,34 @@
         </label>
         <p class="hint" id="keyHint"></p>
         <p class="hint">Pick a <strong>tool-capable</strong> model. Groq default works; some OpenRouter free models don't support tool calling.</p>
+
+        <hr />
+        <h3>Location</h3>
+        <label>Region — postcode or suburb
+          <input id="regionInput" type="text" placeholder="e.g. 1072 or Glen Innes" />
+        </label>
+        <p class="hint">Used to find stores when none are pinned below.</p>
+
+        <div class="storepick">
+          <div class="storepick-search">
+            <select id="storeProvider">
+              <option value="newworld">New World</option>
+              <option value="paknsave">Pak'nSave</option>
+            </select>
+            <input id="storeQuery" type="text" placeholder="suburb or town" />
+            <button type="button" id="storeSearchBtn" class="ghost">Search</button>
+          </div>
+          <ul id="storeResults" class="store-results"></ul>
+          <div class="toggles">
+            <label class="chk"><input type="checkbox" id="tglCountdown" /> Woolworths (national)</label>
+            <label class="chk"><input type="checkbox" id="tglWarehouse" /> The Warehouse (national)</label>
+          </div>
+          <div id="selectedStores" class="selected-stores"></div>
+          <p class="hint" id="storeHint">Pin up to 5 stores. Pinned stores override region.</p>
+        </div>
+
         <div class="row-end">
-          <button value="cancel" class="ghost">Close</button>
+          <button type="button" id="cancelSettings" class="ghost">Close</button>
           <button id="saveSettings" value="save">Save</button>
         </div>
       </form>

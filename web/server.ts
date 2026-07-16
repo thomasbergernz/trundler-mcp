@@ -22,19 +22,51 @@ app.use(express.json({ limit: '1mb' }));
 app.use(express.static(join(__dirname, 'public')));
 
 // --- Settings (never returns the raw key) ---
+function publicSettings(cfg: Awaited<ReturnType<typeof loadConfig>>) {
+  return {
+    provider: cfg.provider,
+    model: cfg.model,
+    hasKey: Boolean(cfg.apiKey),
+    region: cfg.region,
+    stores: cfg.stores,
+  };
+}
+
 app.get('/api/settings', async (_req, res) => {
-  const cfg = await loadConfig();
-  res.json({ provider: cfg.provider, model: cfg.model, hasKey: Boolean(cfg.apiKey) });
+  res.json(publicSettings(await loadConfig()));
 });
 
 app.post('/api/settings', async (req, res) => {
-  const { provider, model, apiKey } = req.body ?? {};
+  const { provider, model, apiKey, region, stores } = req.body ?? {};
   const patch: Record<string, unknown> = {};
   if (provider === 'groq' || provider === 'openrouter') patch.provider = provider as LlmProvider;
   if (typeof model === 'string' && model.trim()) patch.model = model.trim();
   if (typeof apiKey === 'string' && apiKey.length > 0) patch.apiKey = apiKey;
-  const cfg = await saveConfig(patch);
-  res.json({ provider: cfg.provider, model: cfg.model, hasKey: Boolean(cfg.apiKey) });
+  if (typeof region === 'string') patch.region = region.trim();
+  if (Array.isArray(stores)) {
+    patch.stores = stores
+      .filter((s) => s && typeof s.provider === 'string')
+      .slice(0, 5)
+      .map((s) => ({
+        provider: String(s.provider),
+        storeId: typeof s.storeId === 'string' ? s.storeId : undefined,
+        label: typeof s.label === 'string' ? s.label : undefined,
+      }));
+  }
+  res.json(publicSettings(await saveConfig(patch)));
+});
+
+// --- Store lookup for the Settings picker ---
+app.get('/api/stores', async (req, res) => {
+  const provider = String(req.query.provider ?? '');
+  const query = typeof req.query.query === 'string' ? req.query.query : undefined;
+  try {
+    const p = (await getRegistry()).get(provider);
+    if (!p.listStores) return res.json({ stores: [], count: 0 });
+    res.json(await p.listStores(query));
+  } catch (err) {
+    res.status(400).json({ error: String((err as Error).message ?? err), stores: [], count: 0 });
+  }
 });
 
 // --- Woolworths (countdown) auth ---
