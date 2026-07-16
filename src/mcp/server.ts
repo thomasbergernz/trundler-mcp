@@ -55,6 +55,16 @@ export function buildServer(registry: ProviderRegistry = buildRegistry()): McpSe
         'Also include the product name, pack size, and pack price so the shopper has full',
         'context. This ordering and labelling applies to any product listing you show.',
         '',
+        'PER-STORE PRICING (newworld / paknsave):',
+        '',
+        '- These banners price per branch. `search_products`, `get_specials` and `browse_products`',
+        '  take an optional `storeId` — for a query about a specific branch, resolve it with',
+        '  `list_stores` (filter by suburb) and PASS that `storeId`. If you omit it, the persisted',
+        '  default store is used, which may be a different branch than the shopper means.',
+        '- Every Foodstuffs product list echoes the `storeId` it was priced at. Label the store',
+        '  from THAT returned `storeId` (match it back to list_stores) — never assume the branch',
+        '  from the suburb the shopper mentioned. countdown and warehouse are national (no storeId).',
+        '',
         'MULTI-STORE PRICE COMPARISON (price a list across nearby stores):',
         '',
         '- Use `list_stores` to find New World / Pak\'nSave branches — filter by suburb or town',
@@ -156,13 +166,26 @@ export function buildServer(registry: ProviderRegistry = buildRegistry()): McpSe
           .boolean()
           .optional()
           .describe('Only items on special or multi-buy (default: false).'),
+        storeId: z
+          .string()
+          .optional()
+          .describe(
+            'For per-store providers (newworld/paknsave): the store to price at, from list_stores. ' +
+              'If omitted, the persisted/default store is used — pass it explicitly to avoid ' +
+              'pricing the wrong branch. The result echoes the storeId actually used.',
+          ),
         ...providerArg,
       },
     },
-    async ({ query, maxProducts, inStockOnly, specialsOnly, provider }) => {
+    async ({ query, maxProducts, inStockOnly, specialsOnly, storeId, provider }) => {
       try {
         return textResult(
-          await resolve(provider).searchProducts(query, { maxProducts, inStockOnly, specialsOnly }),
+          await resolve(provider).searchProducts(query, {
+            maxProducts,
+            inStockOnly,
+            specialsOnly,
+            storeId,
+          }),
         );
       } catch (err) {
         return errorResult(err);
@@ -177,12 +200,19 @@ export function buildServer(registry: ProviderRegistry = buildRegistry()): McpSe
       inputSchema: {
         maxProducts: z.number().optional().describe('Max products to return (default: all).'),
         pageSize: z.number().optional().describe('Products per API request (default: 120, max 120).'),
+        storeId: z
+          .string()
+          .optional()
+          .describe(
+            'For per-store providers (newworld/paknsave): the store to price at, from list_stores. ' +
+              'If omitted, the persisted/default store is used. The result echoes the storeId used.',
+          ),
         ...providerArg,
       },
     },
-    async ({ maxProducts, pageSize, provider }) => {
+    async ({ maxProducts, pageSize, storeId, provider }) => {
       try {
-        return textResult(await resolve(provider).getSpecials({ maxProducts, pageSize }));
+        return textResult(await resolve(provider).getSpecials({ maxProducts, pageSize, storeId }));
       } catch (err) {
         return errorResult(err);
       }
@@ -200,10 +230,17 @@ export function buildServer(registry: ProviderRegistry = buildRegistry()): McpSe
         specialsOnly: z.boolean().optional().describe('Only specials (default: false).'),
         maxProducts: z.number().optional().describe('Max products to return (default: all).'),
         pageSize: z.number().optional().describe('Products per API request (default: 120).'),
+        storeId: z
+          .string()
+          .optional()
+          .describe(
+            'For per-store providers (newworld/paknsave): the store to price at, from list_stores. ' +
+              'If omitted, the persisted/default store is used. The result echoes the storeId used.',
+          ),
         ...providerArg,
       },
     },
-    async ({ department, aisle, specialsOnly, maxProducts, pageSize, provider }) => {
+    async ({ department, aisle, specialsOnly, maxProducts, pageSize, storeId, provider }) => {
       try {
         return textResult(
           await resolve(provider).browseProducts(department, {
@@ -211,6 +248,7 @@ export function buildServer(registry: ProviderRegistry = buildRegistry()): McpSe
             specialsOnly,
             maxProducts,
             pageSize,
+            storeId,
           }),
         );
       } catch (err) {

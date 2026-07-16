@@ -31,6 +31,10 @@ export interface ProductList {
   totalAvailable?: number;
   count: number;
   products: Product[];
+  /** For per-store-pricing providers: the store id these prices were drawn
+   *  from (the explicit override, else the persisted/default selection). Lets
+   *  callers avoid mislabelling results as a different store. */
+  storeId?: string;
 }
 
 export interface CartItem {
