@@ -28,6 +28,33 @@ const PREAMBLE = [
 
 const MAX_ROUNDS = 8;
 
+/** One completion round, retrying once on a malformed-tool-call format error
+ *  (intermittent on Groq's Llama models). Re-throws after the retry. */
+async function chatWithRetry(
+  settings: WebConfig,
+  messages: ChatMessage[],
+  tools: Awaited<ReturnType<typeof listOpenAiTools>>,
+  emit: Emit,
+): Promise<ChatMessage> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await chat({
+        provider: settings.provider,
+        apiKey: settings.apiKey,
+        model: settings.model,
+        messages,
+        tools,
+      });
+    } catch (err) {
+      if ((err as { toolFormat?: boolean }).toolFormat && attempt === 0) {
+        emit('thinking', { tools: ['retrying malformed tool call'] });
+        continue;
+      }
+      throw err;
+    }
+  }
+}
+
 export async function runAgent(
   history: ChatMessage[],
   settings: WebConfig,
@@ -38,13 +65,7 @@ export async function runAgent(
   const messages: ChatMessage[] = [{ role: 'system', content: system }, ...history];
 
   for (let round = 0; round < MAX_ROUNDS; round++) {
-    const assistant = await chat({
-      provider: settings.provider,
-      apiKey: settings.apiKey,
-      model: settings.model,
-      messages,
-      tools,
-    });
+    const assistant = await chatWithRetry(settings, messages, tools, emit);
     messages.push(assistant);
 
     const calls = assistant.tool_calls ?? [];

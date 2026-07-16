@@ -59,6 +59,17 @@ export async function chat(params: ChatParams): Promise<ChatMessage> {
 
   if (!res.ok) {
     const detail = await res.text().catch(() => '');
+    // Groq returns 400 tool_use_failed when the model emits a tool call in the
+    // Llama `<function=name {json}>` text format its validator can't parse. It
+    // is intermittent — the caller retries once, then surfaces a clear hint.
+    if (/tool_use_failed/.test(detail)) {
+      const e = new Error(
+        `The model "${params.model}" produced a malformed tool call. ` +
+          `Try a model with cleaner tool calling (e.g. openai/gpt-oss-20b on Groq) in Settings.`,
+      );
+      (e as { toolFormat?: boolean }).toolFormat = true;
+      throw e;
+    }
     throw new Error(`LLM ${params.provider} ${res.status}: ${detail.slice(0, 500)}`);
   }
 

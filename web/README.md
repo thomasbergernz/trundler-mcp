@@ -24,7 +24,10 @@ npm run dev            # → http://127.0.0.1:4173  (override port: TRUNDLER_WEB
 Open http://127.0.0.1:4173. On first run the Settings dialog opens — pick a
 provider, paste a free API key, and choose a **tool-capable** model:
 
-- **Groq** (recommended default): `llama-3.3-70b-versatile`
+- **Groq**: `llama-3.3-70b-versatile` (default) works most of the time, but the
+  Llama models occasionally emit a malformed tool call that Groq rejects
+  (`tool_use_failed`). The app retries once, then asks you to switch. For the
+  most reliable tool calling on Groq use **`openai/gpt-oss-20b`** (or `120b`).
 - **OpenRouter**: your choice — but note some free models do **not** support
   tool calling and won't work.
 
