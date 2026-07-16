@@ -9,7 +9,14 @@ import { buildRegistry, DEFAULT_PROVIDER } from '../providers/index.js';
 
 // Report the real package version (../../package.json relative to this file at
 // both src/mcp/server.ts and dist/mcp/server.js) so the MCP handshake never lies.
-const { version } = createRequire(import.meta.url)('../../package.json') as { version: string };
+// Bundled embeddings (e.g. the desktop sidecar) ship without the manifest — fall
+// back rather than crash at import time.
+let version = '0.0.0';
+try {
+  ({ version } = createRequire(import.meta.url)('../../package.json') as { version: string });
+} catch {
+  /* no package.json in reach — bundled context */
+}
 
 function textResult(data: unknown) {
   return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };

@@ -295,12 +295,17 @@ async function refreshLogin() {
   }
 }
 
+let logoutArm = null; // two-step logout instead of confirm() — native dialogs
+                      // are unreliable in system webviews (Tauri/wry).
 loginPill.addEventListener('click', async () => {
   if (loginPill.classList.contains('busy')) return;
   const state = loginPill.dataset.state;
-  if (state === 'in' && !confirm('Log out of Woolworths? You will need to sign in again to price Woolworths.')) {
+  if (state === 'in' && !logoutArm) {
+    loginPill.textContent = 'Click again to log out';
+    logoutArm = setTimeout(() => { logoutArm = null; refreshLogin(); }, 4000);
     return;
   }
+  if (logoutArm) { clearTimeout(logoutArm); logoutArm = null; }
   loginPill.classList.add('busy');
   try {
     if (state === 'in') {
@@ -343,7 +348,14 @@ function createPicker(ids) {
     sync();
   };
   const add = (s) => {
-    if (stores.length >= 5) { alert('Up to 5 stores.'); return false; }
+    if (stores.length >= 5) {
+      // Inline notice instead of alert() — native dialogs are unreliable in
+      // system webviews (Tauri/wry).
+      const hint = byId(ids.hint);
+      hint.textContent = 'Up to 5 stores — remove one first.';
+      setTimeout(render, 2500);
+      return false;
+    }
     if (stores.some((x) => storeKey(x) === storeKey(s))) return false;
     stores.push(s);
     render();
