@@ -9,18 +9,16 @@ import type { WebConfig } from './config.js';
 
 export type Emit = (event: string, data?: Record<string, unknown>) => void;
 
-/** Reproduces the session's behaviour: ask for location first, cap at 5 stores. */
+/** Always-on app context. Location handling (ask vs use saved) is decided by
+ *  locationContext() below, so it is intentionally NOT in here. */
 const PREAMBLE = [
   '',
   '--- App context ---',
   'You are the assistant behind a local grocery-pricing web app for New Zealand',
   'shoppers. Providers: countdown (Woolworths, national, needs login),',
-  'newworld and paknsave (per-store — call list_stores and pass a storeId),',
-  'warehouse (national). If the user asks for prices "near me" or "close to me"',
-  'and you do not yet know their suburb, town or postcode, ASK for it before',
-  'calling list_stores; meanwhile you may offer to price national stores',
-  '(countdown/warehouse). compare_list and budget_basket accept at most 5',
-  'stores. For newworld/paknsave, ALWAYS pass a storeId (from list_stores) to',
+  'newworld and paknsave (per-store — pass a storeId from list_stores),',
+  'warehouse (national). compare_list and budget_basket accept at most 5',
+  'stores. For newworld/paknsave, ALWAYS pass a storeId to',
   'search_products/get_specials/browse_products/compare_list, and label prices',
   'by the storeId the result echoes — never by the suburb alone. If a',
   'Woolworths/countdown call reports the user is not logged in,',
@@ -60,7 +58,7 @@ async function chatWithRetry(
 }
 
 /** Turn the user's saved region / pinned stores into system-prompt guidance.
- *  Explicit stores take precedence over region. */
+ *  Explicit stores take precedence over region; if neither is set, ask. */
 function locationContext(settings: WebConfig): string {
   if (settings.stores && settings.stores.length > 0) {
     const lines = settings.stores.map((s) => {
@@ -69,25 +67,35 @@ function locationContext(settings: WebConfig): string {
     });
     return [
       '',
-      '--- Saved stores (use these; do NOT ask for location) ---',
-      'The user has pinned these stores. Price against exactly these for',
-      'compare_list / budget_basket, and pass the matching storeId to',
-      'search_products / get_specials for the foodstuffs ones. Only deviate if',
-      'the user explicitly names different stores in the message.',
+      '--- The user\'s location is ALREADY SET. Do NOT ask for it. ---',
+      'The user has pinned the exact stores below. These ARE their location.',
+      'NEVER ask for a suburb, town or postcode, and do NOT call list_stores or',
+      'offer to add "nearby" branches. Price against EXACTLY these stores:',
       ...lines,
+      'For the foodstuffs stores pass the storeId shown above. countdown/',
+      'warehouse are national (no storeId). Use compare_list for a list across',
+      'them, or search_products with the storeId for a single item. Only use',
+      'different stores if the user explicitly names them in their message.',
     ].join('\n');
   }
   if (settings.region && settings.region.trim()) {
     return [
       '',
-      '--- Saved region (use this; do NOT ask for location) ---',
-      `The user's location is "${settings.region.trim()}". When they ask about`,
-      'prices near them, call list_stores with this as the query to find nearby',
-      'New World / Pak\'nSave branches (pick up to 5), then price with their',
-      'storeIds. countdown and warehouse are national.',
+      '--- The user\'s location is ALREADY SET. Do NOT ask for it. ---',
+      `The user's location is "${settings.region.trim()}". NEVER ask for a`,
+      'suburb/town/postcode — call list_stores with this region as the query to',
+      'find nearby New World / Pak\'nSave branches (pick up to 5), then price with',
+      'their storeIds. countdown and warehouse are national.',
     ].join('\n');
   }
-  return '';
+  return [
+    '',
+    '--- Location not set ---',
+    'If the user asks for prices "near me" and you do not know their suburb,',
+    'town or postcode, ask for it before calling list_stores; meanwhile you may',
+    'offer national stores (countdown/warehouse). They can also pin stores in',
+    'Settings to skip this.',
+  ].join('\n');
 }
 
 export async function runAgent(
