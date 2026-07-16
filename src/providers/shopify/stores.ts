@@ -17,3 +17,21 @@ export const CERES: ShopifyStore = {
   name: 'Ceres Organics',
   origin: 'https://ceres.co.nz',
 };
+
+export const SABATO: ShopifyStore = {
+  id: 'sabato',
+  name: 'Sabato',
+  origin: 'https://www.sabato.co.nz',
+};
+
+export const PADDOCK_TO_PANTRY: ShopifyStore = {
+  id: 'paddocktopantry',
+  name: 'Paddock to Pantry',
+  origin: 'https://paddocktopantry.co.nz',
+};
+
+export const GROCERY_BOX: ShopifyStore = {
+  id: 'grocerybox',
+  name: 'Grocery Box',
+  origin: 'https://grocerybox.co.nz',
+};
