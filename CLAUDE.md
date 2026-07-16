@@ -16,6 +16,7 @@ npm run cli login      # Countdown browser login (or: node dist/cli.js login)
 npm run cli check      # verify stored session
 node smoke-test.mjs    # spawns built server over stdio, lists tools, exercises a couple (needs build + stored login)
 node pns-test.mjs      # exercises Pak'nSave provider directly against dist/ (needs build)
+node compare-test.mjs  # live multi-store compare_list + saved-list round-trip (needs build)
 ```
 
 There is no test framework or linter — verification is `npm run typecheck` plus the standalone `*.mjs` smoke scripts (which hit live provider APIs).
@@ -34,6 +35,8 @@ Provider-plugin design: MCP tools are provider-agnostic and dispatch by an optio
 - `src/providers/warehouse/` — one-off `WarehouseProvider` for The Warehouse (Salesforce Commerce Cloud / SFRA). No public product JSON, so it scrapes the `data-gtm-product` payload SFRA embeds in each result tile (`/search?q=` or `?cgid=foodhouseholdpets`, 32/page). Read-only, anonymous; fetches via `curlGet` (the Cloudflare edge 403s Node's fetch) with 429 back-off. Results filtered to the `foodhouseholdpets` department (spans food/household/pets); no reliable was-price for specials.
 - `src/providers/farro/` — one-off `FarroProvider` for Farro's bespoke "Olympic Trader" Blazor backend. `POST /api/ViewModel/Search/Search` (header `x-tradingentity-id: Olympic-1234`) for search/browse (Category facet); specials are the `onSale` products scanned from that catalog (no server-side specials filter exists).
 - `src/core/curl.ts` — shared `curlGet()` (status + headers + body) for hosts whose incomplete TLS chain Node's `fetch` rejects (`UNABLE_TO_VERIFY_LEAF_SIGNATURE`). Same no-extra-deps escape hatch as the Foodstuffs token mint.
+- `src/core/compareList.ts` — cross-provider orchestration: `compareList(registry, items, stores)` prices a keyword list across up to 5 stores (fans out `searchProducts` per item×store), picks the top relevance match + alternates, and computes per-store subtotals/coverage, cheapest-per-item, and cheapest full basket. A store that errors (e.g. Countdown not logged in) degrades to an `unavailable` column. Backs the `compare_list` tool. Matching is relevance-based, not barcode-exact (no shared EAN). Foodstuffs is priced per-branch via the per-call `SearchOptions.storeId` override (no persisted `set_store` mutation); `StoreInfo` now carries `suburb`/`latitude`/`longitude` and `listStores` filters by name/suburb/region.
+- `src/core/shoppingList.ts` — provider-agnostic saved "regular list" (`saveList`/`getList`) persisted to `<configDir>/list.json`; backs the `save_list`/`get_list` tools.
 - `src/mcp/server.ts` — `buildServer()` registers all tools and the server-level presentation instructions (letter labels, unit-price sorting, product links). Version is read from `package.json` at runtime.
 - Entry points: `src/index.ts` (stdio server bin), `src/cli.ts` (setup CLI), `src/lib.ts` (side-effect-free library export: `buildServer`, `buildRegistry`, types).
 

@@ -82,7 +82,9 @@ export class WarehouseProvider implements ShoppingProvider {
       await sleep(1000 * 2 ** attempt); // 1s, 2s, 4s
       res = await curlGet(url);
     }
-    if (res.status >= 300 && res.status < 400 && res.headers.location) {
+    // curlGet doesn't follow redirects; a search can 301 to a canonical URL (or a
+    // strong single match to its PDP). Follow up to 3 hops.
+    for (let hop = 0; hop < 3 && res.status >= 300 && res.status < 400 && res.headers.location; hop++) {
       res = await curlGet(new URL(res.headers.location, ORIGIN).toString());
     }
     if (res.status !== 200) {

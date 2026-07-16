@@ -1,7 +1,9 @@
 import { createRequire } from 'node:module';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
+import { compareList } from '../core/compareList.js';
 import type { ProviderRegistry, ShoppingProvider } from '../core/provider.js';
+import { getList, saveList } from '../core/shoppingList.js';
 import { buildRegistry, DEFAULT_PROVIDER } from '../providers/index.js';
 
 // Report the real package version (../../package.json relative to this file at
@@ -51,6 +53,23 @@ export function buildServer(registry: ProviderRegistry = buildRegistry()): McpSe
         '',
         'Also include the product name, pack size, and pack price so the shopper has full',
         'context. This ordering and labelling applies to any product listing you show.',
+        '',
+        'MULTI-STORE PRICE COMPARISON (price a list across nearby stores):',
+        '',
+        '- Use `list_stores` to find New World / Pak\'nSave branches — filter by suburb or town',
+        '  (e.g. "gate pa"), not just the store name. Each store carries its suburb and',
+        '  latitude/longitude. Let the shopper pick up to 5 stores to compare.',
+        '- Then call `compare_list` with the shopping list and those stores. Foodstuffs stores',
+        '  (newworld/paknsave) need a `storeId`; `countdown` (requires login) and `warehouse`',
+        '  are national — no storeId. The result gives each store\'s matched product + price per',
+        '  item, a per-store basket subtotal, coverage, the cheapest store per item, and the',
+        '  cheapest full-basket store.',
+        '- Matches are the top keyword hit, NOT barcode-exact. Check the product names against',
+        '  what the shopper meant; if one is wrong, refine that item\'s query or pick from the',
+        '  `alternates`. Report any `not-found` items and any `unavailable` store (e.g. Countdown',
+        '  when not logged in) rather than hiding them.',
+        '- `save_list` / `get_list` store the shopper\'s regular list so it can be reused and fed',
+        '  straight into `compare_list`.',
         '',
         'DELEGATED SHOPPING (building a cart from a list, Countdown only):',
         '',
@@ -197,9 +216,13 @@ export function buildServer(registry: ProviderRegistry = buildRegistry()): McpSe
     {
       description:
         'List a provider\'s stores (for providers with per-store pricing, e.g. New World). ' +
-        'Optionally filter by name. Use set_store to choose one before searching.',
+        'Optionally filter by name, suburb, town or region. Stores include suburb and ' +
+        'latitude/longitude. Use set_store to pick one, or pass store ids to compare_list.',
       inputSchema: {
-        query: z.string().optional().describe('Filter stores by name, e.g. "auckland".'),
+        query: z
+          .string()
+          .optional()
+          .describe('Filter by name/suburb/town/region, e.g. "gate pa", "auckland".'),
         ...providerArg,
       },
     },
@@ -227,6 +250,88 @@ export function buildServer(registry: ProviderRegistry = buildRegistry()): McpSe
         const p = resolve(provider);
         if (!p.setStore) throw new Error(`${p.name} does not use per-store selection.`);
         return textResult(await p.setStore(storeId));
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  // --- Multi-store comparison + saved list ----------------------------------
+
+  const listItemsSchema = z
+    .array(
+      z.object({
+        query: z.string().describe('Item search keyword, e.g. "milk 2L", "free range eggs 12".'),
+        quantity: z.number().optional().describe('Quantity of the matched product (default: 1).'),
+      }),
+    )
+    .describe('The shopping list.');
+
+  server.registerTool(
+    'compare_list',
+    {
+      description:
+        'Price a shopping list across up to 5 stores and compare. For each item at each store ' +
+        'it returns the top matching product and price, plus each store\'s basket subtotal, ' +
+        'coverage, the cheapest store per item, and the cheapest full-basket store. Foodstuffs ' +
+        'stores (newworld/paknsave) need a storeId from list_stores; countdown (requires login) ' +
+        'and warehouse are national. Matches are relevance-based, not barcode-exact — verify ' +
+        'names and use each item\'s `alternates` to substitute. A store that cannot be priced ' +
+        'is returned as an `unavailable` column, never an error.',
+      inputSchema: {
+        items: listItemsSchema,
+        stores: z
+          .array(
+            z.object({
+              provider: z
+                .string()
+                .describe('Provider id: newworld, paknsave, countdown, or warehouse.'),
+              storeId: z
+                .string()
+                .optional()
+                .describe('Store id (required for newworld/paknsave; from list_stores).'),
+              label: z.string().optional().describe('Optional display label for this column.'),
+            }),
+          )
+          .max(5)
+          .describe('Up to 5 stores to compare.'),
+      },
+    },
+    async ({ items, stores }) => {
+      try {
+        return textResult(await compareList(registry, items, stores));
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'save_list',
+    {
+      description:
+        "Save the shopper's regular shopping list (item keywords + quantities) for reuse. " +
+        'Overwrites any previous list. Retrieve it with get_list and feed it to compare_list.',
+      inputSchema: { items: listItemsSchema },
+    },
+    async ({ items }) => {
+      try {
+        return textResult(await saveList(items));
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'get_list',
+    {
+      description: "Get the shopper's saved regular shopping list (empty if none saved yet).",
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        return textResult(await getList());
       } catch (err) {
         return errorResult(err);
       }

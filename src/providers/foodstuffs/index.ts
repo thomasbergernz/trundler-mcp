@@ -50,6 +50,14 @@ interface RawStore {
   name?: string;
   region?: string;
   address?: unknown;
+  latitude?: number;
+  longitude?: number;
+  physicalAddress?: {
+    additionalCityName?: string; // the suburb, e.g. "Gate Pa"
+    cityName?: string;
+    regionName?: string;
+    postalCode?: string;
+  };
 }
 
 const NOT_SUPPORTED = 'Not yet supported for this provider (requires a logged-in session).';
@@ -124,15 +132,17 @@ export class FoodstuffsProvider implements ShoppingProvider {
   async listStores(query?: string): Promise<StoreSelection> {
     const raw = (await this.apiFetch('/v1/edge/store')) as RawStore[] | { stores?: RawStore[] };
     const all = Array.isArray(raw) ? raw : (raw.stores ?? []);
+    const stores: StoreInfo[] = all.map((s) => toStoreInfo(s));
+    // Match against name, region, suburb and address so users can filter by
+    // suburb (e.g. "gate pa") or town, not just the store name.
     const q = query?.trim().toLowerCase();
-    const filtered = q ? all.filter((s) => (s.name ?? '').toLowerCase().includes(q)) : all;
-    const stores: StoreInfo[] = filtered.map((s) => ({
-      id: s.id,
-      name: s.name ?? '(unnamed)',
-      region: s.region,
-      address: typeof s.address === 'string' ? s.address : undefined,
-    }));
-    return { stores, count: stores.length };
+    const filtered = q
+      ? stores.filter((s) =>
+          [s.name, s.region, s.suburb, s.address]
+            .some((f) => (f ?? '').toLowerCase().includes(q)),
+        )
+      : stores;
+    return { stores: filtered, count: filtered.length };
   }
 
   async setStore(storeId: string): Promise<StoreInfo> {
@@ -208,7 +218,7 @@ export class FoodstuffsProvider implements ShoppingProvider {
   }
 
   async searchProducts(query: string, opts: SearchOptions = {}): Promise<ProductList> {
-    const storeId = await this.requireStore();
+    const storeId = opts.storeId ?? (await this.requireStore());
     const max = opts.maxProducts ?? 48;
     const filters = opts.specialsOnly
       ? `stores:${storeId} AND onPromotion:${storeId}`
@@ -218,7 +228,7 @@ export class FoodstuffsProvider implements ShoppingProvider {
   }
 
   async getSpecials(opts: SpecialsOptions = {}): Promise<ProductList> {
-    const storeId = await this.requireStore();
+    const storeId = opts.storeId ?? (await this.requireStore());
     const max = opts.maxProducts ?? 120;
     const filters = `stores:${storeId} AND onPromotion:${storeId}`;
     const { products, totalAvailable } = await this.collect(storeId, '', filters, max);
@@ -226,7 +236,7 @@ export class FoodstuffsProvider implements ShoppingProvider {
   }
 
   async browseProducts(department: string, opts: BrowseOptions = {}): Promise<ProductList> {
-    const storeId = await this.requireStore();
+    const storeId = opts.storeId ?? (await this.requireStore());
     const max = opts.maxProducts ?? 120;
     let filters = `stores:${storeId} AND category0NI:"${department}"`;
     if (opts.specialsOnly) filters += ` AND onPromotion:${storeId}`;
@@ -291,4 +301,18 @@ export class FoodstuffsProvider implements ShoppingProvider {
 
 function centsToDollars(cents?: number): number | undefined {
   return typeof cents === 'number' ? Math.round(cents) / 100 : undefined;
+}
+
+/** Map a raw edge store to the shared StoreInfo, keeping coordinates + suburb. */
+function toStoreInfo(s: RawStore): StoreInfo {
+  const pa = s.physicalAddress;
+  return {
+    id: s.id,
+    name: s.name ?? '(unnamed)',
+    region: s.region ?? pa?.regionName,
+    address: typeof s.address === 'string' ? s.address : undefined,
+    suburb: pa?.additionalCityName ?? pa?.cityName,
+    latitude: typeof s.latitude === 'number' ? s.latitude : undefined,
+    longitude: typeof s.longitude === 'number' ? s.longitude : undefined,
+  };
 }
