@@ -20,6 +20,9 @@ Supported providers:
 - **Countdown / Woolworths NZ** — full account access (login + cart + order history)
 - **New World** (Foodstuffs) — anonymous price/product browsing
 - **Pak'nSave** (Foodstuffs) — anonymous price/product browsing
+- **Ceres Organics** — anonymous price/product browsing (Shopify)
+- **Farro Fresh** — anonymous price/product browsing
+- **Naturally Organic** — anonymous price/product browsing (WooCommerce)
 
 ## Providers at a glance
 
@@ -30,6 +33,9 @@ Different chains expose different things, so trundler's capabilities vary by pro
 | Countdown / Woolworths NZ | `countdown` | **Required** (browser) | ✅ Yes | ✅ (after login) | Automatic (by fulfilment region) |
 | New World | `newworld` | Not required | ❌ No (read-only) | ✅ (anonymous) | **Per-store** — pick one with `set_store` |
 | Pak'nSave | `paknsave` | Not required | ❌ No (read-only) | ✅ (anonymous) | **Per-store** — pick one with `set_store` |
+| Ceres Organics | `ceres` | Not required | ❌ No (read-only) | ✅ (anonymous) | National — no store selection |
+| Farro Fresh | `farro` | Not required | ❌ No (read-only) | ✅ (anonymous) | National — no store selection |
+| Naturally Organic | `naturallyorganic` | Not required | ❌ No (read-only) | ✅ (anonymous) | National — no store selection |
 
 In short:
 
@@ -38,6 +44,9 @@ In short:
 - **New World & Pak'nSave** — **no login needed** to search and compare prices, but
   they are **read-only**: you cannot add to a cart or see order history (yet). Because
   Foodstuffs pricing is per-store, you must choose a store first with `set_store`.
+- **Ceres, Farro & Naturally Organic** — specialty / organic grocers, also **read-only**
+  and **no login needed**. Pricing is national (single online catalogue), so there's no
+  store to select — just `search_products`, `get_specials` and `browse_products`.
 
 > **Why the difference?** Countdown authenticates a real user session, which unlocks
 > the cart. The Foodstuffs (New World / Pak'nSave) read APIs serve anonymous guests,
@@ -218,10 +227,31 @@ Every tool takes an optional `provider` argument (default: `countdown`).
 | `login` | Open a browser to sign in | countdown |
 | `check_login` | Verify the stored session | countdown |
 | `cart_get` / `cart_add` / `cart_update` / `cart_remove` | Manage the cart | countdown |
+| `cart_add_many` / `cart_clear` | Build/reset a whole cart at once | countdown |
+| `reorder_usuals` | Add your most-frequent items in one call | countdown |
 | `list_past_orders` / `list_past_order_items` / `get_order_items` | Order history | countdown |
 
-Calling a login/cart/order tool on New World or Pak'nSave returns a clear
-"requires login — not yet supported" error rather than failing silently.
+Calling a login/cart/order tool on any read-only provider (New World, Pak'nSave,
+Ceres, Farro, Naturally Organic) returns a clear "requires login — not yet
+supported" error rather than failing silently.
+
+## Delegated shopping
+
+You can hand a whole shop to the agent — on Countdown, which is the only provider
+with a writable cart. Two paths:
+
+- **Restock your usuals:** `reorder_usuals` adds your most frequently purchased
+  in-stock items (the exact SKUs you actually buy) in one call.
+- **From a list:** the agent resolves each line with `search_products`, confirms
+  anything ambiguous or new, then adds the chosen SKUs with `cart_add_many`
+  (`cart_clear` first if you want the trolley to exactly match the list).
+
+Every batch result carries a `reviewUrl` (your Woolworths trolley).
+
+> **Where it stops — on purpose.** trundler fills the trolley and hands back. It
+> **does not** pick a delivery slot, submit checkout, place the order, or handle
+> payment — there are no tools for those, and the server instructions tell the agent
+> not to attempt them. You open the `reviewUrl` to choose a time and pay yourself.
 
 ## Product listings
 
@@ -235,12 +265,28 @@ comparison straightforward.
 
 Implement `ShoppingProvider` (see `src/core/provider.ts`) in a new
 `src/providers/<name>/` folder and register it in `src/providers/index.ts`. The MCP
-tools are provider-agnostic and dispatch automatically. Foodstuffs banners (New
-World, Pak'nSave) share one `FoodstuffsProvider` parameterised by a banner config —
-adding another Foodstuffs banner is a few lines in `src/providers/foodstuffs/banners.ts`.
+tools are provider-agnostic and dispatch automatically.
+
+Several providers are already generic over a platform, so adding another store on the
+same platform is config-only:
+
+- **Foodstuffs** banners (New World, Pak'nSave) share one `FoodstuffsProvider` — add
+  a banner in `src/providers/foodstuffs/banners.ts`.
+- **Shopify** storefronts share `ShopifyProvider` (public `products.json` /
+  `collections.json` / `search/suggest.json`) — add a store in
+  `src/providers/shopify/stores.ts`.
+- **WooCommerce** shops share `WooCommerceProvider` (public `wc/store/v1` REST API) —
+  add a store in `src/providers/woocommerce/stores.ts`.
+
+Farro runs a bespoke "Olympic Trader" platform, so `FarroProvider` is a one-off.
 
 Capabilities a provider doesn't support (e.g. cart on a read-only provider) simply
 throw an error, which surfaces to the agent as a tool error.
+
+> Some stores serve an incomplete TLS certificate chain that Node's `fetch` rejects
+> (`UNABLE_TO_VERIFY_LEAF_SIGNATURE`). trundler routes those requests through the
+> system `curl` (see `src/core/curl.ts`), the same no-extra-deps escape hatch the
+> Foodstuffs guest-token mint uses.
 
 ## Roadmap
 

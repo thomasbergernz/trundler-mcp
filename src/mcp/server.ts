@@ -51,6 +51,28 @@ export function buildServer(registry: ProviderRegistry = buildRegistry()): McpSe
         '',
         'Also include the product name, pack size, and pack price so the shopper has full',
         'context. This ordering and labelling applies to any product listing you show.',
+        '',
+        'DELEGATED SHOPPING (building a cart from a list, Countdown only):',
+        '',
+        '- To restock a usual shop, prefer `reorder_usuals` — it adds the shopper\'s most',
+        '  frequently bought in-stock items directly (exact SKUs they actually buy), which is',
+        '  more accurate than searching by name.',
+        '- For a free-text list, resolve each line with `search_products`, then add the chosen',
+        '  SKUs in one `cart_add_many` call. When a line is ambiguous (many sizes/brands) or is a',
+        '  new item the shopper has not bought before, show the top candidate(s) and confirm the',
+        '  choice before adding. Never silently guess an expensive or wrong item.',
+        '- Use `cart_clear` to reset the trolley before rebuilding it to match a list.',
+        '- After building the cart, present a review: items added, any that failed or were out of',
+        '  stock (report these — never drop them silently), the total, and the `reviewUrl`.',
+        '',
+        'HARD BOUNDARY — the shopper always finishes checkout themselves:',
+        '',
+        '- You may fill the trolley. You must NOT select or reserve a delivery/pickup slot, submit',
+        '  checkout, place the order, or handle payment. There are deliberately no tools for those.',
+        '- Your job ends at "trolley filled + here is your review and the link to finish". Direct',
+        '  the shopper to the `reviewUrl` to choose a time and pay in their own browser.',
+        '- Adding items to a cart spends nothing, but still confirm with the shopper before adding',
+        '  anything beyond what they asked for.',
       ].join('\n'),
     },
   );
@@ -279,6 +301,88 @@ export function buildServer(registry: ProviderRegistry = buildRegistry()): McpSe
     async ({ sku, unit, provider }) => {
       try {
         return textResult(await resolve(provider).cartRemove(sku, unit ?? 'Each'));
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  // --- Batch cart / delegation ----------------------------------------------
+  // These fill the trolley in one call. They never book a slot or pay — the
+  // result carries a `reviewUrl` the shopper opens to finish checkout themselves.
+
+  server.registerTool(
+    'cart_add_many',
+    {
+      description:
+        'Add several items to the cart in one call (for building a whole shop). Returns a ' +
+        "per-item outcome, the cart totals, and a reviewUrl where the shopper reviews and " +
+        'completes checkout themselves. Does NOT book a delivery slot or pay.',
+      inputSchema: {
+        items: z
+          .array(
+            z.object({
+              sku: z.string().describe('Product SKU.'),
+              quantity: z.number().optional().describe('Quantity (default: 1).'),
+              unit: z.enum(['Each', 'Kg']).optional().describe('Pricing unit (default: Each).'),
+            }),
+          )
+          .describe('Items to add.'),
+        ...providerArg,
+      },
+    },
+    async ({ items, provider }) => {
+      try {
+        const p = resolve(provider);
+        if (!p.cartAddMany) throw new Error(`${p.name} does not support batch cart operations.`);
+        const normalized = items.map((i) => ({
+          sku: i.sku,
+          quantity: i.quantity ?? 1,
+          unit: i.unit ?? 'Each',
+        }));
+        return textResult(await p.cartAddMany(normalized));
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'cart_clear',
+    {
+      description:
+        'Remove every item from the cart (e.g. to reset the trolley before rebuilding it from a ' +
+        'list). Returns the per-item outcome and empty totals.',
+      inputSchema: { ...providerArg },
+    },
+    async ({ provider }) => {
+      try {
+        const p = resolve(provider);
+        if (!p.cartClear) throw new Error(`${p.name} does not support batch cart operations.`);
+        return textResult(await p.cartClear());
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'reorder_usuals',
+    {
+      description:
+        "Add the shopper's most frequently purchased in-stock items to the cart in one call — " +
+        'the fastest way to restock a usual shop. Returns the per-item outcome, cart totals, and ' +
+        'a reviewUrl for the shopper to finish checkout. Does NOT book a slot or pay.',
+      inputSchema: {
+        maxItems: z.number().optional().describe('How many top items to add (default: 20).'),
+        ...providerArg,
+      },
+    },
+    async ({ maxItems, provider }) => {
+      try {
+        const p = resolve(provider);
+        if (!p.reorderUsuals) throw new Error(`${p.name} does not support reordering usuals.`);
+        return textResult(await p.reorderUsuals(maxItems ?? 20));
       } catch (err) {
         return errorResult(err);
       }
