@@ -13,6 +13,21 @@ export const COUNTDOWN = {
   /** Tokens are treated as valid for this long after capture before a refresh. */
   tokenTtlMs: 3.5 * 60 * 60 * 1000,
 
+  /** Anonymous guest sessions are shorter-lived — re-mint conservatively. */
+  guestTtlMs: 25 * 60 * 1000,
+
+  /** Store selection (Click & Collect) — reverse-engineered from the web app and
+   *  HAR-verified. All work on an anonymous guest session (no login, no XSRF):
+   *  list the pickup addresses, then pin one by PUTting the method + address. */
+  stores: {
+    /** GET — every Click & Collect pickup address, grouped into regional areas. */
+    list: '/api/v1/addresses/pickup-addresses',
+    /** PUT (body `{}`) — set the guest fulfilment method to pickup first. */
+    setMethod: '/api/v1/fulfilment/my/methods/pickup',
+    /** PUT (body `{ addressId }`) — pin the pickup store; prices then follow it. */
+    setStore: '/api/v1/fulfilment/my/pickup-addresses',
+  },
+
   /** Headers required by the Woolworths BFF/API. */
   headers: {
     Accept: 'application/json, text/plain, */*',

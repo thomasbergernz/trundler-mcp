@@ -1,6 +1,7 @@
 import { createRequire } from 'node:module';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
+import { budgetBasket } from '../core/budgetBasket.js';
 import { compareList } from '../core/compareList.js';
 import type { ProviderRegistry, ShoppingProvider } from '../core/provider.js';
 import { getList, saveList } from '../core/shoppingList.js';
@@ -8,7 +9,14 @@ import { buildRegistry, DEFAULT_PROVIDER } from '../providers/index.js';
 
 // Report the real package version (../../package.json relative to this file at
 // both src/mcp/server.ts and dist/mcp/server.js) so the MCP handshake never lies.
-const { version } = createRequire(import.meta.url)('../../package.json') as { version: string };
+// Bundled embeddings (e.g. the desktop sidecar) ship without the manifest — fall
+// back rather than crash at import time.
+let version = '0.0.0';
+try {
+  ({ version } = createRequire(import.meta.url)('../../package.json') as { version: string });
+} catch {
+  /* no package.json in reach — bundled context */
+}
 
 function textResult(data: unknown) {
   return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
@@ -54,22 +62,50 @@ export function buildServer(registry: ProviderRegistry = buildRegistry()): McpSe
         'Also include the product name, pack size, and pack price so the shopper has full',
         'context. This ordering and labelling applies to any product listing you show.',
         '',
+        'PER-STORE PRICING (newworld / paknsave / countdown):',
+        '',
+        '- These providers price per branch. `search_products`, `get_specials` and `browse_products`',
+        '  take an optional `storeId` — for a query about a specific branch, resolve it with',
+        '  `list_stores` (filter by suburb) and PASS that `storeId`. If you omit it, the persisted',
+        '  default store is used, which may be a different branch than the shopper means.',
+        '- Every Foodstuffs product list echoes the `storeId` it was priced at. Label the store',
+        '  from THAT returned `storeId` (match it back to list_stores) — never assume the branch',
+        '  from the suburb the shopper mentioned.',
+        '- countdown store selection works LOGGED-OUT: `list_stores`/`set_store` and the `storeId`',
+        '  override pin the anonymous guest session to a Woolworths branch. Omit a store and reads',
+        '  use Woolworths\' DEFAULT store (roughly IP-located) — present that as "Woolworths (default',
+        '  store)". A logged-in session always prices at the shopper\'s own account store and ignores',
+        '  any pin. warehouse is national (no storeId).',
+        '',
         'MULTI-STORE PRICE COMPARISON (price a list across nearby stores):',
         '',
         '- Use `list_stores` to find New World / Pak\'nSave branches — filter by suburb or town',
         '  (e.g. "gate pa"), not just the store name. Each store carries its suburb and',
         '  latitude/longitude. Let the shopper pick up to 5 stores to compare.',
-        '- Then call `compare_list` with the shopping list and those stores. Foodstuffs stores',
-        '  (newworld/paknsave) need a `storeId`; `countdown` (requires login) and `warehouse`',
-        '  are national — no storeId. The result gives each store\'s matched product + price per',
-        '  item, a per-store basket subtotal, coverage, the cheapest store per item, and the',
-        '  cheapest full-basket store.',
+        '- Then call `compare_list` with the shopping list and those stores. Foodstuffs',
+        '  (newworld/paknsave) and countdown each take a per-store `storeId` (from list_stores);',
+        '  `warehouse` is national — no storeId. The result gives each store\'s matched product +',
+        '  price per item, a per-store basket subtotal, coverage, the cheapest store per item, and',
+        '  the cheapest full-basket store.',
+        '- countdown works logged-out: reads use an anonymous guest session. With a `storeId` it',
+        '  prices at that Woolworths branch; without one, at Woolworths\' DEFAULT store (roughly',
+        '  IP-located) — present that as "Woolworths (default store)". A logged-in session prices at',
+        '  the shopper\'s own store instead. Cart and order history always need the `login` tool.',
         '- Matches are the top keyword hit, NOT barcode-exact. Check the product names against',
         '  what the shopper meant; if one is wrong, refine that item\'s query or pick from the',
-        '  `alternates`. Report any `not-found` items and any `unavailable` store (e.g. Countdown',
-        '  when not logged in) rather than hiding them.',
+        '  `alternates`. Report any `not-found` items and any `unavailable` store',
+        '  rather than hiding them.',
         '- `save_list` / `get_list` store the shopper\'s regular list so it can be reused and fed',
         '  straight into `compare_list`.',
+        '',
+        'BUDGET SPECIALS BASKET ("what can $X buy to feed people"):',
+        '',
+        '- Use `budget_basket` with the shopper\'s stores and a budget (default $100). It returns a',
+        '  best-value basket of current specials that fills the budget across categories, cheapest',
+        '  store per item. It does NOT know how many people it feeds — YOU estimate servings/meals',
+        '  from the item names, pack sizes and quantities, group items into meals, and adjust',
+        '  quantities or swap items to cover the number of people the shopper named. Call out the',
+        '  total, the leftover, and any skipped (unavailable) store.',
         '',
         'DELEGATED SHOPPING (building a cart from a list, Countdown only):',
         '',
@@ -104,7 +140,7 @@ export function buildServer(registry: ProviderRegistry = buildRegistry()): McpSe
     'login',
     {
       description:
-        'Open a browser window to sign in to a shopping provider. Complete the login in the window; the session is captured and stored locally. Run this once, or again when the session expires.',
+        'Open a browser window to sign in to a shopping provider. Complete the login in the window; the session is captured and stored locally. Run this once, or again when the session expires. For countdown, login is needed for cart and order tools (and to price at your own store) — product search works without it at the default store.',
       inputSchema: { ...providerArg },
     },
     async ({ provider }) => {
@@ -146,13 +182,26 @@ export function buildServer(registry: ProviderRegistry = buildRegistry()): McpSe
           .boolean()
           .optional()
           .describe('Only items on special or multi-buy (default: false).'),
+        storeId: z
+          .string()
+          .optional()
+          .describe(
+            'For per-store providers (newworld/paknsave/countdown): the store to price at, from list_stores. ' +
+              'If omitted, the persisted/default store is used — pass it explicitly to avoid ' +
+              'pricing the wrong branch. The result echoes the storeId actually used.',
+          ),
         ...providerArg,
       },
     },
-    async ({ query, maxProducts, inStockOnly, specialsOnly, provider }) => {
+    async ({ query, maxProducts, inStockOnly, specialsOnly, storeId, provider }) => {
       try {
         return textResult(
-          await resolve(provider).searchProducts(query, { maxProducts, inStockOnly, specialsOnly }),
+          await resolve(provider).searchProducts(query, {
+            maxProducts,
+            inStockOnly,
+            specialsOnly,
+            storeId,
+          }),
         );
       } catch (err) {
         return errorResult(err);
@@ -167,12 +216,19 @@ export function buildServer(registry: ProviderRegistry = buildRegistry()): McpSe
       inputSchema: {
         maxProducts: z.number().optional().describe('Max products to return (default: all).'),
         pageSize: z.number().optional().describe('Products per API request (default: 120, max 120).'),
+        storeId: z
+          .string()
+          .optional()
+          .describe(
+            'For per-store providers (newworld/paknsave/countdown): the store to price at, from list_stores. ' +
+              'If omitted, the persisted/default store is used. The result echoes the storeId used.',
+          ),
         ...providerArg,
       },
     },
-    async ({ maxProducts, pageSize, provider }) => {
+    async ({ maxProducts, pageSize, storeId, provider }) => {
       try {
-        return textResult(await resolve(provider).getSpecials({ maxProducts, pageSize }));
+        return textResult(await resolve(provider).getSpecials({ maxProducts, pageSize, storeId }));
       } catch (err) {
         return errorResult(err);
       }
@@ -190,10 +246,17 @@ export function buildServer(registry: ProviderRegistry = buildRegistry()): McpSe
         specialsOnly: z.boolean().optional().describe('Only specials (default: false).'),
         maxProducts: z.number().optional().describe('Max products to return (default: all).'),
         pageSize: z.number().optional().describe('Products per API request (default: 120).'),
+        storeId: z
+          .string()
+          .optional()
+          .describe(
+            'For per-store providers (newworld/paknsave/countdown): the store to price at, from list_stores. ' +
+              'If omitted, the persisted/default store is used. The result echoes the storeId used.',
+          ),
         ...providerArg,
       },
     },
-    async ({ department, aisle, specialsOnly, maxProducts, pageSize, provider }) => {
+    async ({ department, aisle, specialsOnly, maxProducts, pageSize, storeId, provider }) => {
       try {
         return textResult(
           await resolve(provider).browseProducts(department, {
@@ -201,6 +264,7 @@ export function buildServer(registry: ProviderRegistry = buildRegistry()): McpSe
             specialsOnly,
             maxProducts,
             pageSize,
+            storeId,
           }),
         );
       } catch (err) {
@@ -274,8 +338,9 @@ export function buildServer(registry: ProviderRegistry = buildRegistry()): McpSe
         'Price a shopping list across up to 5 stores and compare. For each item at each store ' +
         'it returns the top matching product and price, plus each store\'s basket subtotal, ' +
         'coverage, the cheapest store per item, and the cheapest full-basket store. Foodstuffs ' +
-        'stores (newworld/paknsave) need a storeId from list_stores; countdown (requires login) ' +
-        'and warehouse are national. Matches are relevance-based, not barcode-exact — verify ' +
+        'stores (newworld/paknsave) need a storeId from list_stores; countdown (guest prices at ' +
+        'the default Woolworths store unless logged in) and warehouse are national. Matches are ' +
+        'relevance-based, not barcode-exact — verify ' +
         'names and use each item\'s `alternates` to substitute. A store that cannot be priced ' +
         'is returned as an `unavailable` column, never an error.',
       inputSchema: {
@@ -300,6 +365,53 @@ export function buildServer(registry: ProviderRegistry = buildRegistry()): McpSe
     async ({ items, stores }) => {
       try {
         return textResult(await compareList(registry, items, stores));
+      } catch (err) {
+        return errorResult(err);
+      }
+    },
+  );
+
+  const storesSchema = z
+    .array(
+      z.object({
+        provider: z.string().describe('Provider id: newworld, paknsave, countdown, or warehouse.'),
+        storeId: z
+          .string()
+          .optional()
+          .describe('Store id (required for newworld/paknsave; from list_stores).'),
+        label: z.string().optional().describe('Optional display label.'),
+      }),
+    )
+    .max(5);
+
+  server.registerTool(
+    'budget_basket',
+    {
+      description:
+        'Suggest a best-value basket of current SPECIALS that fills a budget (default $100) ' +
+        'without exceeding it, pooling specials across up to 5 stores and keeping the cheapest ' +
+        'store per item, balanced across categories (cheapest per-unit first). Returns the ' +
+        'basket, total, leftover, and a per-category breakdown. It does NOT estimate how many ' +
+        'people it feeds — reason about servings from the item names/sizes and adjust ' +
+        'quantities or swap items to suit the number of people. Foodstuffs stores need a ' +
+        'storeId; countdown prices at the default Woolworths store unless logged in; a store ' +
+        'that cannot be priced is skipped.',
+      inputSchema: {
+        stores: storesSchema.describe('Up to 5 stores to pull specials from.'),
+        budget: z.number().optional().describe('Target spend in dollars (default: 100).'),
+        maxItems: z.number().optional().describe('Max distinct items in the basket (default: 40).'),
+        excludeCategories: z
+          .array(z.string())
+          .optional()
+          .describe(
+            'Category substrings to drop (default: non-food aisles like household, pet, ' +
+              'health & body, baby, alcohol). Pass [] to include every category.',
+          ),
+      },
+    },
+    async ({ stores, budget, maxItems, excludeCategories }) => {
+      try {
+        return textResult(await budgetBasket(registry, stores, { budget, maxItems, excludeCategories }));
       } catch (err) {
         return errorResult(err);
       }

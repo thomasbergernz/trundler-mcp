@@ -9,6 +9,7 @@ export { buildRegistry, DEFAULT_PROVIDER } from './providers/index.js';
 export { ProviderRegistry } from './core/provider.js';
 export { TokenStore } from './core/tokenStore.js';
 export { compareList } from './core/compareList.js';
+export { budgetBasket } from './core/budgetBasket.js';
 export { getList, saveList } from './core/shoppingList.js';
 
 export type {
@@ -20,6 +21,12 @@ export type {
   StoreColumn,
   StoreSelector,
 } from './core/compareList.js';
+export type {
+  BasketItem,
+  BasketStoreStatus,
+  BudgetBasketOptions,
+  BudgetBasketResult,
+} from './core/budgetBasket.js';
 
 export type {
   BrowseOptions,

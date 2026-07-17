@@ -7,6 +7,8 @@ import type {
   SearchOptions,
   ShoppingProvider,
   SpecialsOptions,
+  StoreInfo,
+  StoreSelection,
 } from '../../core/provider.js';
 import { TokenStore } from '../../core/tokenStore.js';
 import type {
@@ -20,8 +22,10 @@ import type {
   Unit,
 } from '../../core/types.js';
 import { COUNTDOWN } from './constants.js';
+import { mintGuestTokens } from './guestSession.js';
 import { interactiveLogin, silentRefresh } from './login.js';
 import { isExpired, verifyTokens } from './session.js';
+import { CountdownStoreConfig, fetchPickupStores, filterStores } from './stores.js';
 
 interface ApiError {
   error: true;
@@ -39,7 +43,13 @@ export class CountdownProvider implements ShoppingProvider {
   readonly name = COUNTDOWN.name;
 
   private readonly store = new TokenStore(COUNTDOWN.id);
+  private readonly storeConfig = new CountdownStoreConfig();
   private cache: Tokens | null = null;
+  /** Anonymous guest sessions for read-only calls, keyed by pinned store id
+   *  ('' = the IP-located default). In-memory only (short TTL). Keying by store
+   *  keeps concurrent reads for different branches on separate cookie jars, so
+   *  the stateful store-pin never races (e.g. compare_list across branches). */
+  private readonly guestCache = new Map<string, Tokens>();
 
   // --- Authentication -------------------------------------------------------
 
@@ -78,15 +88,52 @@ export class CountdownProvider implements ShoppingProvider {
     }
   }
 
+  /**
+   * Anonymous session for reads, pinned to a store. `storeId` (a per-call
+   * override) wins; otherwise the persisted store pin, if any; otherwise the
+   * IP-located default. Sessions are cached per store id and re-minted on expiry.
+   */
+  private async getGuestTokens(storeId?: string): Promise<Tokens> {
+    const pin = storeId ?? (await this.storeConfig.resolve())?.id;
+    const key = pin ?? '';
+    const cached = this.guestCache.get(key);
+    if (cached && !isExpired(cached)) return cached;
+    const minted = await mintGuestTokens(pin);
+    this.guestCache.set(key, minted);
+    return minted;
+  }
+
+  /**
+   * Tokens for read-only calls (search/specials/browse). An explicit `storeId`
+   * override always uses the anonymous session pinned to that store — never the
+   * logged-in one, whose store-set would mutate the shopper's real account
+   * fulfilment. With no override: prefer the logged-in session (prices follow
+   * the shopper's own store), else an anonymous guest session at the persisted
+   * (or default) store. Cart and order history never use this — a guest has
+   * neither.
+   */
+  private async getReadTokens(storeId?: string): Promise<Tokens> {
+    if (storeId) return this.getGuestTokens(storeId);
+    try {
+      return await this.getTokens();
+    } catch {
+      return this.getGuestTokens();
+    }
+  }
+
   // --- Low-level API helpers ------------------------------------------------
 
-  private async callApi(endpoint: string, method = 'GET', body?: unknown): Promise<unknown> {
-    const tokens = await this.getTokens();
+  private async callApi(
+    endpoint: string,
+    opts: { method?: string; body?: unknown; auth?: 'read' | 'user'; storeId?: string } = {},
+  ): Promise<unknown> {
+    const tokens =
+      opts.auth === 'read' ? await this.getReadTokens(opts.storeId) : await this.getTokens();
     const url = endpoint.startsWith('http') ? endpoint : `${COUNTDOWN.origin}${endpoint}`;
     const res = await fetch(url, {
-      method,
+      method: opts.method ?? 'GET',
       headers: { ...COUNTDOWN.headers, Cookie: filterCookies(tokens.cookies) },
-      body: body ? JSON.stringify(body) : undefined,
+      body: opts.body ? JSON.stringify(opts.body) : undefined,
     });
     if (!res.ok) {
       return { error: true, status: res.status, statusText: res.statusText } satisfies ApiError;
@@ -126,7 +173,7 @@ export class CountdownProvider implements ShoppingProvider {
       query,
     )}&inStockProductsOnly=${inStock}&size=${limit}`;
 
-    const res = await this.callApi(url);
+    const res = await this.callApi(url, { auth: 'read', storeId: opts.storeId });
     if (isApiError(res)) throw apiError('Search failed', res);
 
     const payload = res as ProductsPayload;
@@ -152,7 +199,7 @@ export class CountdownProvider implements ShoppingProvider {
 
     while (collected.length < maxLimit) {
       const url = `/api/v1/products?target=specials&useRankedSpecials=true&page=${page}&size=${perPage}`;
-      const res = await this.callApi(url);
+      const res = await this.callApi(url, { auth: 'read', storeId: opts.storeId });
       if (isApiError(res)) {
         if (collected.length > 0) break;
         throw apiError('Failed to fetch specials', res);
@@ -187,7 +234,7 @@ export class CountdownProvider implements ShoppingProvider {
 
     while (collected.length < maxLimit) {
       const url = `/api/v1/products?target=browse&${filterParam}&inStockProductsOnly=false&size=${perPage}&page=${page}`;
-      const res = await this.callApi(url);
+      const res = await this.callApi(url, { auth: 'read', storeId: opts.storeId });
       if (isApiError(res)) {
         if (collected.length > 0) break;
         throw apiError('Failed to browse products', res);
@@ -209,6 +256,31 @@ export class CountdownProvider implements ShoppingProvider {
       count: collected.length,
       products: collected.map(mapProduct),
     };
+  }
+
+  // --- Store selection (guest) ----------------------------------------------
+  // Woolworths prices per branch. A guest can pin a store (Click & Collect
+  // address) and reads then price there; a logged-in shopper always prices at
+  // their own account store, so these only affect the anonymous session.
+
+  async listStores(query?: string): Promise<StoreSelection> {
+    const guest = await this.getGuestTokens();
+    const stores = filterStores(await fetchPickupStores(guest.cookies), query);
+    return { stores, count: stores.length };
+  }
+
+  async setStore(storeId: string): Promise<StoreInfo> {
+    const guest = await this.getGuestTokens();
+    const match = (await fetchPickupStores(guest.cookies)).find((s) => s.id === storeId);
+    if (!match) throw new Error(`Unknown ${this.name} store id "${storeId}".`);
+    await this.storeConfig.set(match);
+    // Drop cached guest sessions so the next read re-mints pinned to the new store.
+    this.guestCache.clear();
+    return match;
+  }
+
+  async getStore(): Promise<StoreInfo | null> {
+    return this.storeConfig.resolve();
   }
 
   // --- Cart -----------------------------------------------------------------

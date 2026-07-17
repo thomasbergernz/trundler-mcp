@@ -8,8 +8,10 @@ const UA =
 
 export interface CurlResponse {
   status: number;
-  /** Response headers, keyed by lower-cased name. */
+  /** Response headers, keyed by lower-cased name (duplicates collapse to the last). */
   headers: Record<string, string>;
+  /** Every Set-Cookie header value, in order — the Record above collapses duplicates. */
+  setCookies: string[];
   body: string;
 }
 
@@ -22,14 +24,21 @@ export interface CurlResponse {
  * macOS and Linux, so shelling out keeps those stores reachable with no new deps
  * — the same escape hatch the Foodstuffs guest-token mint already relies on.
  */
-export async function curlGet(url: string): Promise<CurlResponse> {
+export async function curlGet(
+  url: string,
+  opts: {
+    /** Force HTTP/1.1 — some bot-management challenges key on the h2 fingerprint. */
+    http11?: boolean;
+    /** Accept header (default application/json). */
+    accept?: string;
+  } = {},
+): Promise<CurlResponse> {
   let stdout: string;
   try {
-    ({ stdout } = await execFileAsync(
-      'curl',
-      ['-s', '-D', '-', '--max-time', '30', '-H', `User-Agent: ${UA}`, '-H', 'Accept: application/json', url],
-      { maxBuffer: 32 * 1024 * 1024 },
-    ));
+    const args = ['-s', '-D', '-', '--max-time', '30', '-H', `User-Agent: ${UA}`];
+    if (opts.http11) args.push('--http1.1');
+    args.push('-H', `Accept: ${opts.accept ?? 'application/json'}`, url);
+    ({ stdout } = await execFileAsync('curl', args, { maxBuffer: 32 * 1024 * 1024 }));
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
     throw new Error(`curl request failed (${reason}). curl must be installed and on PATH.`);
@@ -45,9 +54,15 @@ export async function curlGet(url: string): Promise<CurlResponse> {
   const statusLine = lines[0] ?? '';
   const status = Number(statusLine.split(' ')[1]) || 0;
   const headers: Record<string, string> = {};
+  const setCookies: string[] = [];
   for (const line of lines.slice(1)) {
     const c = line.indexOf(':');
-    if (c > 0) headers[line.slice(0, c).trim().toLowerCase()] = line.slice(c + 1).trim();
+    if (c > 0) {
+      const name = line.slice(0, c).trim().toLowerCase();
+      const value = line.slice(c + 1).trim();
+      headers[name] = value;
+      if (name === 'set-cookie') setCookies.push(value);
+    }
   }
-  return { status, headers, body };
+  return { status, headers, setCookies, body };
 }
