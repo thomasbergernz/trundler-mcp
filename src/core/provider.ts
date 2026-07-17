@@ -1,9 +1,13 @@
-import type { Cart, CartMutation, ProductList, Unit } from './types.js';
+import type { Cart, CartBatchResult, CartMutation, ProductList, Unit } from './types.js';
 
 export interface SearchOptions {
   maxProducts?: number;
   inStockOnly?: boolean;
   specialsOnly?: boolean;
+  /** Per-call store override for per-store-pricing providers (Foodstuffs). When
+   *  set, price against this store without changing the persisted selection —
+   *  lets one provider instance price several branches in a comparison. */
+  storeId?: string;
 }
 
 export interface BrowseOptions {
@@ -11,11 +15,15 @@ export interface BrowseOptions {
   specialsOnly?: boolean;
   maxProducts?: number;
   pageSize?: number;
+  /** Per-call store override (see SearchOptions.storeId). */
+  storeId?: string;
 }
 
 export interface SpecialsOptions {
   maxProducts?: number;
   pageSize?: number;
+  /** Per-call store override (see SearchOptions.storeId). */
+  storeId?: string;
 }
 
 export interface PastOrderItemsOptions {
@@ -40,6 +48,9 @@ export interface StoreInfo {
   name: string;
   region?: string;
   address?: string;
+  suburb?: string;
+  latitude?: number;
+  longitude?: number;
 }
 
 export interface StoreSelection {
@@ -69,6 +80,16 @@ export interface ShoppingProvider {
   cartAdd(sku: string, quantity: number, unit: Unit): Promise<CartMutation>;
   cartUpdate(sku: string, quantity: number, unit: Unit): Promise<CartMutation>;
   cartRemove(sku: string, unit: Unit): Promise<CartMutation>;
+
+  /**
+   * Delegation helpers for building a whole shop at once. Only providers with a
+   * writable cart implement these; the paid steps (slot, checkout, payment) are
+   * deliberately never exposed — the shopper finishes those in their own browser.
+   */
+  cartAddMany?(items: Array<{ sku: string; quantity: number; unit: Unit }>): Promise<CartBatchResult>;
+  cartClear?(): Promise<CartBatchResult>;
+  /** Add the shopper's most frequently purchased in-stock items to the cart. */
+  reorderUsuals?(maxItems: number): Promise<CartBatchResult>;
 
   listPastOrders(filter?: string): Promise<unknown>;
   listPastOrderItems(opts?: PastOrderItemsOptions): Promise<ProductList>;

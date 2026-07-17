@@ -17,6 +17,8 @@ export interface Product {
   unitMeasure?: string;
   size?: string;
   inStock?: boolean;
+  /** Whether the item is priced per Each or per Kg — needed to re-add it to a cart. */
+  pricingUnit?: Unit;
   image?: string;
   /** Direct link to the product page (opens photo + full detail in a browser). */
   productUrl?: string;
@@ -29,6 +31,10 @@ export interface ProductList {
   totalAvailable?: number;
   count: number;
   products: Product[];
+  /** For per-store-pricing providers: the store id these prices were drawn
+   *  from (the explicit override, else the persisted/default selection). Lets
+   *  callers avoid mislabelling results as a different store. */
+  storeId?: string;
 }
 
 export interface CartItem {
@@ -59,6 +65,30 @@ export interface CartMutation {
   success: boolean;
   item?: { sku?: string; quantity?: number; unit?: string };
   cart: CartTotals;
+}
+
+/** Outcome of one line in a batch cart operation (add-many / reorder). */
+export interface CartBatchItem {
+  sku: string;
+  quantity: number;
+  unit: string;
+  ok: boolean;
+  name?: string;
+  error?: string;
+}
+
+/**
+ * Result of a batch cart operation. Reports each line's outcome, the resulting
+ * cart totals, and the URL where the shopper reviews the trolley and completes
+ * checkout themselves (the agent never books a slot or pays).
+ */
+export interface CartBatchResult {
+  added: number;
+  failed: number;
+  items: CartBatchItem[];
+  totals: CartTotals;
+  /** Where the shopper reviews and finishes (slot + payment) in their own browser. */
+  reviewUrl: string;
 }
 
 /** Persisted authentication material for a provider. */

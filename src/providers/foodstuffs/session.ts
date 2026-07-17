@@ -44,7 +44,10 @@ export async function mintGuestToken(banner: FoodstuffsBanner): Promise<GuestTok
   try {
     const { stdout } = await execFileAsync(
       'curl',
-      ['-s', '-D', '-', '-o', devNull, '--max-time', '20', '-H', `User-Agent: ${UA}`, banner.origin + '/'],
+      // Force HTTP/1.1: Cloudflare's managed challenge keys on the HTTP/2
+      // fingerprint, so an h2 request gets a 403 `cf-mitigated: challenge` and no
+      // token cookie. The same request over h1.1 passes and returns fs-user-token.
+      ['-s', '--http1.1', '-D', '-', '-o', devNull, '--max-time', '20', '-H', `User-Agent: ${UA}`, banner.origin + '/'],
       { maxBuffer: 4 * 1024 * 1024 },
     );
     headers = stdout;
