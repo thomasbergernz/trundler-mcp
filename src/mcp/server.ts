@@ -62,30 +62,35 @@ export function buildServer(registry: ProviderRegistry = buildRegistry()): McpSe
         'Also include the product name, pack size, and pack price so the shopper has full',
         'context. This ordering and labelling applies to any product listing you show.',
         '',
-        'PER-STORE PRICING (newworld / paknsave):',
+        'PER-STORE PRICING (newworld / paknsave / countdown):',
         '',
-        '- These banners price per branch. `search_products`, `get_specials` and `browse_products`',
+        '- These providers price per branch. `search_products`, `get_specials` and `browse_products`',
         '  take an optional `storeId` — for a query about a specific branch, resolve it with',
         '  `list_stores` (filter by suburb) and PASS that `storeId`. If you omit it, the persisted',
         '  default store is used, which may be a different branch than the shopper means.',
         '- Every Foodstuffs product list echoes the `storeId` it was priced at. Label the store',
         '  from THAT returned `storeId` (match it back to list_stores) — never assume the branch',
-        '  from the suburb the shopper mentioned. countdown and warehouse are national (no storeId).',
+        '  from the suburb the shopper mentioned.',
+        '- countdown store selection works LOGGED-OUT: `list_stores`/`set_store` and the `storeId`',
+        '  override pin the anonymous guest session to a Woolworths branch. Omit a store and reads',
+        '  use Woolworths\' DEFAULT store (roughly IP-located) — present that as "Woolworths (default',
+        '  store)". A logged-in session always prices at the shopper\'s own account store and ignores',
+        '  any pin. warehouse is national (no storeId).',
         '',
         'MULTI-STORE PRICE COMPARISON (price a list across nearby stores):',
         '',
         '- Use `list_stores` to find New World / Pak\'nSave branches — filter by suburb or town',
         '  (e.g. "gate pa"), not just the store name. Each store carries its suburb and',
         '  latitude/longitude. Let the shopper pick up to 5 stores to compare.',
-        '- Then call `compare_list` with the shopping list and those stores. Foodstuffs stores',
-        '  (newworld/paknsave) need a `storeId`; `countdown` and `warehouse` are national — no',
-        '  storeId. The result gives each store\'s matched product + price per',
-        '  item, a per-store basket subtotal, coverage, the cheapest store per item, and the',
-        '  cheapest full-basket store.',
-        '- countdown works logged-out: reads use an anonymous guest session priced at Woolworths\'',
-        '  DEFAULT store (roughly IP-located), so present those as "Woolworths (default store)".',
-        '  A logged-in session prices at the shopper\'s own store instead. Cart and order history',
-        '  always need the `login` tool.',
+        '- Then call `compare_list` with the shopping list and those stores. Foodstuffs',
+        '  (newworld/paknsave) and countdown each take a per-store `storeId` (from list_stores);',
+        '  `warehouse` is national — no storeId. The result gives each store\'s matched product +',
+        '  price per item, a per-store basket subtotal, coverage, the cheapest store per item, and',
+        '  the cheapest full-basket store.',
+        '- countdown works logged-out: reads use an anonymous guest session. With a `storeId` it',
+        '  prices at that Woolworths branch; without one, at Woolworths\' DEFAULT store (roughly',
+        '  IP-located) — present that as "Woolworths (default store)". A logged-in session prices at',
+        '  the shopper\'s own store instead. Cart and order history always need the `login` tool.',
         '- Matches are the top keyword hit, NOT barcode-exact. Check the product names against',
         '  what the shopper meant; if one is wrong, refine that item\'s query or pick from the',
         '  `alternates`. Report any `not-found` items and any `unavailable` store',
@@ -181,7 +186,7 @@ export function buildServer(registry: ProviderRegistry = buildRegistry()): McpSe
           .string()
           .optional()
           .describe(
-            'For per-store providers (newworld/paknsave): the store to price at, from list_stores. ' +
+            'For per-store providers (newworld/paknsave/countdown): the store to price at, from list_stores. ' +
               'If omitted, the persisted/default store is used — pass it explicitly to avoid ' +
               'pricing the wrong branch. The result echoes the storeId actually used.',
           ),
@@ -215,7 +220,7 @@ export function buildServer(registry: ProviderRegistry = buildRegistry()): McpSe
           .string()
           .optional()
           .describe(
-            'For per-store providers (newworld/paknsave): the store to price at, from list_stores. ' +
+            'For per-store providers (newworld/paknsave/countdown): the store to price at, from list_stores. ' +
               'If omitted, the persisted/default store is used. The result echoes the storeId used.',
           ),
         ...providerArg,
@@ -245,7 +250,7 @@ export function buildServer(registry: ProviderRegistry = buildRegistry()): McpSe
           .string()
           .optional()
           .describe(
-            'For per-store providers (newworld/paknsave): the store to price at, from list_stores. ' +
+            'For per-store providers (newworld/paknsave/countdown): the store to price at, from list_stores. ' +
               'If omitted, the persisted/default store is used. The result echoes the storeId used.',
           ),
         ...providerArg,

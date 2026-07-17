@@ -46,6 +46,52 @@ check(
   `status=${col.status}, subtotal=${col.subtotal}`,
 );
 
+// 3b. Store selection works logged-out.
+const stores = await countdown.listStores();
+check(
+  'listStores returns pickup stores (guest)',
+  stores.count > 50 && stores.stores.every((s) => s.id && s.name),
+  `count=${stores.count}, first=${stores.stores[0]?.name}`,
+);
+
+const filtered = await countdown.listStores('ponsonby');
+check(
+  'listStores filters by suburb',
+  filtered.count > 0 && filtered.count < stores.count,
+  `ponsonby matches=${filtered.count}`,
+);
+
+// Per-call storeId override reprices at a chosen branch (no persistence side-effect).
+const branch = filtered.stores[0] ?? stores.stores[0];
+const atBranch = await countdown.searchProducts('milk 2l', { maxProducts: 3, storeId: branch.id });
+check(
+  'searchProducts honours a countdown storeId override',
+  atBranch.count > 0 && atBranch.products.every((p) => typeof p.price === 'number'),
+  `store=${branch.name}, first=${atBranch.products[0]?.name} $${atBranch.products[0]?.price}`,
+);
+
+// set_store persists a pin; get_store echoes it.
+const set = await countdown.setStore(branch.id);
+const got = await countdown.getStore();
+check(
+  'setStore persists and getStore returns the pin',
+  set.id === branch.id && got?.id === branch.id,
+  `set=${set.name}, got=${got?.name}`,
+);
+
+// compare_list at a specific countdown branch prices as an ok column.
+const cmpStore = await compareList(
+  registry,
+  [{ query: 'milk 2l' }],
+  [{ provider: 'countdown', storeId: branch.id, label: `Woolworths ${branch.name}` }],
+);
+const scol = cmpStore.stores[0];
+check(
+  'compare_list prices a specific countdown branch',
+  scol.status === 'ok' && scol.subtotal > 0,
+  `status=${scol.status}, subtotal=${scol.subtotal}`,
+);
+
 // 4. Cart must still demand login for guests.
 let cartBlocked = false;
 try {

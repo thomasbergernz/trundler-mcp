@@ -331,6 +331,8 @@ loginPill.addEventListener('click', async () => {
 });
 
 // ---------- store picker factory (shared by Settings + per-chat override) ----------
+// Woolworths (countdown) supports BOTH: the national toggle (IP-default store,
+// no storeId) and per-branch pins added from the search picker (with a storeId).
 const NATIONAL = { countdown: 'Woolworths', warehouse: 'The Warehouse' };
 const storeKey = (s) => s.provider + '|' + (s.storeId || '');
 const byId = (id) => document.getElementById(id);
@@ -338,7 +340,9 @@ const byId = (id) => document.getElementById(id);
 function createPicker(ids) {
   let stores = [];
   const sync = () => {
-    byId(ids.tglC).checked = stores.some((s) => s.provider === 'countdown');
+    // The "national" box reflects only a countdown pin WITHOUT a branch — a
+    // specific-branch pin (has storeId) coexists as its own chip, not national.
+    byId(ids.tglC).checked = stores.some((s) => s.provider === 'countdown' && !s.storeId);
     byId(ids.tglW).checked = stores.some((s) => s.provider === 'warehouse');
   };
   const render = () => {
@@ -469,13 +473,14 @@ byId('saveSettings').addEventListener('click', async (e) => {
 });
 
 // ---------- per-chat store override ----------
-// Guest Woolworths prices come from the account-less DEFAULT (IP-located)
-// store — no branch pinning exists for countdown yet. Make that visible.
+// A countdown pin WITHOUT a specific branch (storeId) prices at the account-less
+// DEFAULT (IP-located) store when logged out — make that visible. A branch pin
+// (from the store search) prices there regardless, so it keeps its own label.
 const labelsOf = (list) =>
   list
     .map((s) => {
       const base = s.label || s.provider;
-      if (s.provider === 'countdown' && loginPill.dataset.state !== 'in') {
+      if (s.provider === 'countdown' && !s.storeId && loginPill.dataset.state !== 'in') {
         return base + ' (default store)';
       }
       return base;
