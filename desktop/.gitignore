@@ -1,6 +1,0 @@
-node_modules/
-package-lock.json
-server-dist/
-src-tauri/target/
-src-tauri/binaries/
-src-tauri/gen/
