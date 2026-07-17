@@ -30,7 +30,7 @@ Different chains expose different things, so trundler's capabilities vary by pro
 
 | Provider | id | Login | Add to cart | Search / specials / browse | Store selection |
 |----------|-----|:-----:|:-----------:|:--------------------------:|-----------------|
-| Countdown / Woolworths NZ | `countdown` | **Required** (browser) | ✅ Yes | ✅ (after login) | Automatic (by fulfilment region) |
+| Countdown / Woolworths NZ | `countdown` | Not required for reads; browser login for cart + history | ✅ (after login) | ✅ (anonymous) | **Per-store** (guest) — pick one with `set_store`; account store when logged in |
 | New World | `newworld` | Not required | ❌ No (read-only) | ✅ (anonymous) | **Per-store** — pick one with `set_store` |
 | Pak'nSave | `paknsave` | Not required | ❌ No (read-only) | ✅ (anonymous) | **Per-store** — pick one with `set_store` |
 | Ceres Organics | `ceres` | Not required | ❌ No (read-only) | ✅ (anonymous) | National — no store selection |
@@ -39,8 +39,11 @@ Different chains expose different things, so trundler's capabilities vary by pro
 
 In short:
 
-- **Countdown / Woolworths** — you log in once in a real browser; after that you can
-  search, view specials, and **add items to a real cart** and read your order history.
+- **Countdown / Woolworths** — search, specials and browse work with **no login**
+  (anonymous guest session). Prices default to Woolworths' IP-located store, or pin a
+  specific branch with `list_stores` / `set_store` (still no login). Log in once in a
+  real browser to **add items to a real cart** and read your order history; a logged-in
+  session prices at your own account store.
 - **New World & Pak'nSave** — **no login needed** to search and compare prices, but
   they are **read-only**: you cannot add to a cart or see order history (yet). Because
   Foodstuffs pricing is per-store, you must choose a store first with `set_store`.
@@ -222,8 +225,8 @@ Every tool takes an optional `provider` argument (default: `countdown`).
 | `search_products` | Search by keyword | all |
 | `get_specials` | Current specials (paginated) | all |
 | `browse_products` | Browse by department / category | all |
-| `list_stores` | List a provider's stores (per-store-pricing providers) | newworld, paknsave |
-| `set_store` | Select the active store (persisted) | newworld, paknsave |
+| `list_stores` | List a provider's stores (per-store-pricing providers) | newworld, paknsave, countdown |
+| `set_store` | Select the active store (persisted) | newworld, paknsave, countdown |
 | `login` | Open a browser to sign in | countdown |
 | `check_login` | Verify the stored session | countdown |
 | `cart_get` / `cart_add` / `cart_update` / `cart_remove` | Manage the cart | countdown |
