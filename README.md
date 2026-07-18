@@ -8,9 +8,12 @@ A **local** MCP server for grocery shopping. Runs entirely on your own machine a
 residential connection — no cloud services, no datacenter IPs, no bot-detection
 logistics.
 
-> **Published on npm:** [`@auckland-ai-collective/trundler-mcp`](https://www.npmjs.com/package/@auckland-ai-collective/trundler-mcp)
-> (repo `trundler-mcp`). Install with `npm install @auckland-ai-collective/trundler-mcp`
-> or run it straight away with `npx @auckland-ai-collective/trundler-mcp`.
+> **This is a fork** of [`auckland-ai-collective/trundler-mcp`](https://github.com/auckland-ai-collective/trundler-mcp)
+> with additional providers and the anonymous Countdown/guest-store work. It is **not**
+> the published package — the npm release
+> [`@auckland-ai-collective/trundler-mcp`](https://www.npmjs.com/package/@auckland-ai-collective/trundler-mcp)
+> (and the badges above) belong to **upstream**. Run this fork **from source** (see
+> [Install](#install)); the npm `npm install` / `npx` paths are upstream's.
 >
 > The running server, its tools, and the on-disk session folder keep the shorter name
 > **`trundler`** (the MCP server id is `trundler`, sessions live under `…/trundler/`).
@@ -92,72 +95,62 @@ Session/config data is stored per provider outside the repo:
 
 ## Install
 
-From npm (no build step needed — ships compiled):
+This fork runs **from source** — clone, install deps, build:
 
 ```bash
-npm install @auckland-ai-collective/trundler-mcp
+git clone https://github.com/thomasbergernz/trundler-mcp.git
+cd trundler-mcp
+npm install
+npm run build      # tsc → dist/
 ```
 
-Or run the server directly without installing:
+The compiled server is `dist/index.js` (point your agent at it — see
+[Register with your agent](#register-with-your-agent)). During development you can
+skip the build and run the TypeScript source directly with `npm run dev`
+(`tsx src/index.ts`).
 
-```bash
-npx @auckland-ai-collective/trundler-mcp
-```
+> Prefer a no-clone install? Use **upstream's** published package —
+> `npm install @auckland-ai-collective/trundler-mcp` or
+> `npx @auckland-ai-collective/trundler-mcp` — but that ships the upstream code, not
+> this fork's changes.
 
 Chromium (used **only** for the Countdown login) is **not** downloaded at install
 time. The first time you run `login`, trundler fetches it once (~150 MB) if it's
-missing — so merely depending on the package stays lightweight, and New World /
-Pak'nSave (which never need a browser) pull nothing extra. To pre-fetch it yourself:
-`npx playwright install chromium`.
-
-Building from source instead:
-
-```bash
-npm install
-npm run build
-```
+missing — so New World / Pak'nSave (which never need a browser) pull nothing extra.
+To pre-fetch it yourself: `npx playwright install chromium`.
 
 ## Register with your agent
 
-Add to your MCP config (e.g. `.mcp.json`). The simplest form runs the published
-server straight from npm — no clone, no build:
-
-```json
-{
-  "mcpServers": {
-    "trundler": {
-      "command": "npx",
-      "args": ["-y", "@auckland-ai-collective/trundler-mcp"]
-    }
-  }
-}
-```
-
-Or point at a local build:
+Add to your MCP config (e.g. `.mcp.json`). Point it at your local build's
+`dist/index.js` (use the absolute path to your checkout):
 
 ```json
 {
   "mcpServers": {
     "trundler": {
       "command": "node",
-      "args": ["D:/Projects/MCP/trundler-mcp/dist/index.js"]
+      "args": ["/path/to/trundler-mcp/dist/index.js"]
     }
   }
 }
 ```
 
-During development you can point it at the TypeScript source instead:
+During development you can point it at the TypeScript source instead (no build step):
 
 ```json
 {
   "mcpServers": {
     "trundler": {
       "command": "npx",
-      "args": ["tsx", "D:/Projects/MCP/trundler-mcp/src/index.ts"]
+      "args": ["tsx", "/path/to/trundler-mcp/src/index.ts"]
     }
   }
 }
 ```
+
+> To run **upstream's** published package instead of this fork, use
+> `"command": "npx", "args": ["-y", "@auckland-ai-collective/trundler-mcp"]` — no
+> clone or build, but it won't include this fork's changes.
 
 > After changing server-level code (including the presentation instructions), rebuild
 > (`npm run build`) and **reconnect** the MCP — instructions and tool lists are sent
@@ -185,8 +178,12 @@ const cart = await buildRegistry().get('countdown').cartGet();
 ```
 
 Types (`ShoppingProvider`, `Cart`, `Product`, …) are exported too. The package ships
-its own `.d.ts` declarations. Prefer spawning the process instead? The published
-`trundler-mcp` bin is the stdio server; `trundler` is the setup CLI (below).
+its own `.d.ts` declarations. Prefer spawning the process instead? The `trundler-mcp`
+bin is the stdio server; `trundler` is the setup CLI (below).
+
+> The `@auckland-ai-collective/trundler-mcp` import above resolves to **upstream's**
+> published package. To use this fork as a library, import from your local build's
+> `dist/lib.js` (or `src/lib.ts` via `tsx`) instead.
 
 ## Setup per provider
 
