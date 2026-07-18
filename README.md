@@ -26,6 +26,7 @@ Supported providers:
 - **Ceres Organics** — anonymous price/product browsing (Shopify)
 - **Farro Fresh** — anonymous price/product browsing
 - **Naturally Organic** — anonymous price/product browsing (WooCommerce)
+- **Maison Vauron** — anonymous price/product browsing (French wine + gourmet food)
 
 ## Providers at a glance
 
@@ -39,6 +40,7 @@ Different chains expose different things, so trundler's capabilities vary by pro
 | Ceres Organics | `ceres` | Not required | ❌ No (read-only) | ✅ (anonymous) | National — no store selection |
 | Farro Fresh | `farro` | Not required | ❌ No (read-only) | ✅ (anonymous) | National — no store selection |
 | Naturally Organic | `naturallyorganic` | Not required | ❌ No (read-only) | ✅ (anonymous) | National — no store selection |
+| Maison Vauron | `maisonvauron` | Not required | ❌ No (read-only) | ✅ (anonymous) | National — no store selection |
 
 In short:
 
@@ -50,9 +52,10 @@ In short:
 - **New World & Pak'nSave** — **no login needed** to search and compare prices, but
   they are **read-only**: you cannot add to a cart or see order history (yet). Because
   Foodstuffs pricing is per-store, you must choose a store first with `set_store`.
-- **Ceres, Farro & Naturally Organic** — specialty / organic grocers, also **read-only**
-  and **no login needed**. Pricing is national (single online catalogue), so there's no
-  store to select — just `search_products`, `get_specials` and `browse_products`.
+- **Ceres, Farro, Naturally Organic & Maison Vauron** — specialty / organic grocers
+  (Maison Vauron is French wine + gourmet food), also **read-only** and **no login
+  needed**. Pricing is national (single online catalogue), so there's no store to select
+  — just `search_products`, `get_specials` and `browse_products`.
 
 > **Why the difference?** Countdown authenticates a real user session, which unlocks
 > the cart. The Foodstuffs (New World / Pak'nSave) read APIs serve anonymous guests,
